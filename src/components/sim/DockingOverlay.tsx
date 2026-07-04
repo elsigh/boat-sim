@@ -24,12 +24,14 @@ type DockingOverlayProps = {
   engineState: TwinEngineState;
   guidance: BerthGuidance | null;
   hudVisible: boolean;
+  leversSwapped: boolean;
   mapBoatCoordinate: {
     lat: number;
     lon: number;
   } | null;
   marina: MarinaLayout;
   onToggleHud: () => void;
+  onToggleLeverSwap: () => void;
   onBoatChange: (slug: string) => void;
   onConditionsModeChange: (mode: "typical" | "calm") => void;
   onEnableEngines: () => void;
@@ -81,9 +83,11 @@ export function DockingOverlay({
   engineState,
   guidance,
   hudVisible,
+  leversSwapped,
   mapBoatCoordinate,
   marina,
   onToggleHud,
+  onToggleLeverSwap,
   onBoatChange,
   onConditionsModeChange,
   onEnableEngines,
@@ -362,6 +366,23 @@ export function DockingOverlay({
             </div>
 
             <ControllerStatus controls={controls} />
+
+            <button
+              type="button"
+              suppressHydrationWarning
+              onPointerDown={stopPointerPropagation}
+              onClick={onToggleLeverSwap}
+              className={`mt-1.5 w-full rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
+                leversSwapped
+                  ? "border-amber-300/25 bg-amber-300/10 text-amber-100"
+                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              Swap levers · {leversSwapped ? "on" : "off"}
+              <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
+                Use if your port lever drives the starboard engine
+              </span>
+            </button>
           </div>
 
           <HelmInfoPanel telemetry={telemetry} />

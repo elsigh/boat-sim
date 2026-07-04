@@ -63,6 +63,19 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   const [selectedBoatSlug, setSelectedBoatSlug] = useState(initialBoatSlug ?? DEFAULT_BOAT_SLUG);
   const [conditionsMode, setConditionsMode] = useState<"typical" | "calm">("typical");
   const [hudVisible, setHudVisible] = useState(true);
+  const [leversSwapped, setLeversSwapped] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("boat-sim:levers-swapped") === "1",
+  );
+
+  const handleToggleLeverSwap = () => {
+    setLeversSwapped((value) => {
+      const next = !value;
+      window.localStorage.setItem("boat-sim:levers-swapped", next ? "1" : "0");
+      return next;
+    });
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -142,11 +155,13 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     useMemo(
       () => ({
         throttleMode: "dualAxis" as const,
-        throttleAxes: { port: 0, starboard: 1 },
+        throttleAxes: leversSwapped
+          ? { port: 1, starboard: 0 }
+          : { port: 0, starboard: 1 },
         invertThrottleAxes: true,
         bowThrusterButtons: { port: 4, starboard: 5 },
       }),
-      [],
+      [leversSwapped],
     ),
   );
 
@@ -396,8 +411,10 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         conditionsMode={conditionsMode}
         guidance={guidance}
         hudVisible={hudVisible}
+        leversSwapped={leversSwapped}
         marina={marina}
         onToggleHud={() => setHudVisible((value) => !value)}
+        onToggleLeverSwap={handleToggleLeverSwap}
         onConditionsModeChange={setConditionsMode}
         onEnableAudio={engineAudio.enableAudio}
         onEnableEngines={handleEnableBothEngines}
