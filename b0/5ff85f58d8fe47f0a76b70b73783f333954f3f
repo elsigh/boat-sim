@@ -1,0 +1,25 @@
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_4ed882ef6d5ebe 146-147
+  s_503510a5adb0be::t_6a25d180d9003f 236
+  s_503510a5adb0be::t_efc7cf0afffb6a 224,227
+  s_503510a5adb0be::t_3615b536b57428 545
+src/components/sim/ScenarioCard.tsx
+  s_503510a5adb0be::t_394aeb5d19ce4a 111
+  s_503510a5adb0be::t_8ca0e3e51b09c8 148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b05ff85f58d8fe47f0a76b70b73783f333954f3f",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
