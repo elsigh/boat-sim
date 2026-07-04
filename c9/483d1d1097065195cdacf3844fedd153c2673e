@@ -1,0 +1,31 @@
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_80ac50c77a04cf 394-427
+  s_503510a5adb0be::t_a16a7fbc7b61f0 26,34-35,39
+  s_503510a5adb0be::t_4d7220e567d1f4 89,94-95,99
+src/hooks/useGamepad.ts
+  s_503510a5adb0be::t_95ff84b8e0350f 201-220
+  s_503510a5adb0be::t_1e02320840d354 37-45
+  s_503510a5adb0be::t_2747723c0d85c6 292-303,306-317
+  s_503510a5adb0be::t_a88f7b7e21a4aa 95
+src/components/sim/BoatSimulator.tsx
+  s_503510a5adb0be::t_926a383240a5ab 71-95
+  s_503510a5adb0be::t_8285c9ad203a10 179-182,187,190,192,196-216
+  s_503510a5adb0be::t_566fe1f6cc07b5 463,467-468,471
+  s_503510a5adb0be::t_81f55dc7549908 217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c9483d1d1097065195cdacf3844fedd153c2673e",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
