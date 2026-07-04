@@ -23,11 +23,13 @@ type DockingOverlayProps = {
   controls: GamepadSnapshot;
   engineState: TwinEngineState;
   guidance: BerthGuidance | null;
+  hudVisible: boolean;
   mapBoatCoordinate: {
     lat: number;
     lon: number;
   } | null;
   marina: MarinaLayout;
+  onToggleHud: () => void;
   onBoatChange: (slug: string) => void;
   onConditionsModeChange: (mode: "typical" | "calm") => void;
   onEnableEngines: () => void;
@@ -78,8 +80,10 @@ export function DockingOverlay({
   controls,
   engineState,
   guidance,
+  hudVisible,
   mapBoatCoordinate,
   marina,
+  onToggleHud,
   onBoatChange,
   onConditionsModeChange,
   onEnableEngines,
@@ -117,9 +121,18 @@ export function DockingOverlay({
           viewportDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
       />
+      {!hudVisible ? (
+        <MinimalHud
+          engineState={engineState}
+          guidance={guidance}
+          onToggleHud={onToggleHud}
+          selectedSpawn={selectedSpawn}
+          telemetry={telemetry}
+        />
+      ) : (
       <div className="flex h-full flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between">
-        <div className="flex min-h-0 flex-col gap-3 lg:h-full lg:w-[clamp(24rem,32vw,30rem)]">
-          <div className="pointer-events-auto max-w-[30rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
+        <div className="flex min-h-0 flex-col gap-3 lg:h-full lg:w-[clamp(19rem,25vw,23rem)]">
+          <div className="pointer-events-auto max-w-[23rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[0.65rem] uppercase tracking-[0.3em] text-fuchsia-100/70">
@@ -196,7 +209,7 @@ export function DockingOverlay({
             telemetry={telemetry}
           />
 
-          <div className="pointer-events-auto min-h-0 max-w-[30rem]">
+          <div className="pointer-events-auto min-h-0 max-w-[23rem]">
             <ScenarioCard
               activeLegIndex={activeLegIndex}
               className="lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto"
@@ -208,13 +221,23 @@ export function DockingOverlay({
           </div>
         </div>
 
-        <div className="pointer-events-auto flex max-w-[20rem] flex-col gap-2 lg:h-full lg:w-[20rem] 2xl:w-[21rem]">
+        <div className="pointer-events-auto flex max-w-[17.5rem] flex-col gap-2 lg:h-full lg:w-[17.5rem]">
           <div className="rounded-2xl border border-white/12 bg-slate-950/74 px-3 py-2 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between gap-4">
               <p className="text-[0.65rem] uppercase tracking-[0.3em] text-emerald-100/70">
                 Sim View
               </p>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onPointerDown={stopPointerPropagation}
+                  onClick={onToggleHud}
+                  aria-label="Hide HUD (H)"
+                  title="Hide HUD (H)"
+                  className="flex h-7 items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 text-[0.55rem] uppercase tracking-[0.14em] text-slate-300 transition hover:bg-white/10"
+                >
+                  Hide · H
+                </button>
                 <button
                   type="button"
                   onPointerDown={stopPointerPropagation}
@@ -344,6 +367,77 @@ export function DockingOverlay({
           <HelmInfoPanel telemetry={telemetry} />
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+function MinimalHud({
+  engineState,
+  guidance,
+  onToggleHud,
+  selectedSpawn,
+  telemetry,
+}: {
+  engineState: TwinEngineState;
+  guidance: BerthGuidance | null;
+  onToggleHud: () => void;
+  selectedSpawn: SpawnPoint;
+  telemetry: DockingTelemetry;
+}) {
+  const isDeparture = selectedSpawn.kind === "departure";
+  const docked = !isDeparture && Boolean(guidance?.docked);
+  const departed = isDeparture && guidance !== null && guidance.rangeM > 25;
+
+  return (
+    <div className="pointer-events-none flex h-full flex-col items-center justify-end">
+      <div className="pointer-events-auto mb-1 flex max-w-[96vw] items-center gap-2 overflow-x-auto rounded-2xl border border-white/12 bg-slate-950/74 px-3 py-2 shadow-2xl backdrop-blur-xl">
+        {docked || departed ? (
+          <span className="shrink-0 rounded-full border border-emerald-300/25 bg-emerald-400/12 px-2 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-emerald-100">
+            {docked ? "Docked" : "Under way"}
+          </span>
+        ) : null}
+        <MiniMetric
+          label="Port"
+          value={formatSigned(engineState.port.effectiveThrottle, 2)}
+        />
+        <MiniMetric
+          label="Stbd"
+          value={formatSigned(engineState.starboard.effectiveThrottle, 2)}
+        />
+        <MiniMetric label="SOG" value={`${telemetry.speedKnots.toFixed(1)}kn`} />
+        <MiniMetric label="HDG" value={formatHeading(telemetry.headingDeg)} />
+        {guidance ? (
+          <>
+            <MiniMetric label="Rng" value={`${guidance.rangeM.toFixed(0)}m`} />
+            <MiniMetric label="Cls" value={formatSigned(guidance.closureKnots, 1)} />
+            <MiniMetric
+              label="Off"
+              value={`${Math.abs(guidance.acrossM).toFixed(1)}${guidance.acrossM >= 0 ? "S" : "P"}`}
+            />
+            <MiniMetric label="Ang" value={formatSigned(guidance.headingErrorDeg, 0)} />
+          </>
+        ) : null}
+        <button
+          type="button"
+          onPointerDown={stopPointerPropagation}
+          onClick={onToggleHud}
+          className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[0.58rem] uppercase tracking-[0.16em] text-slate-300 transition hover:bg-white/10"
+        >
+          HUD · H
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex shrink-0 items-baseline gap-1 rounded-lg bg-white/5 px-1.5 py-1">
+      <span className="text-[0.52rem] uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </span>
+      <span className="font-mono text-[0.68rem] text-slate-100">{value}</span>
     </div>
   );
 }
@@ -382,7 +476,7 @@ function DockingPracticePanel({
   const windRelativeDeg = marina.conditions.windTowardDeg - telemetry.headingDeg;
 
   return (
-    <div className="pointer-events-auto max-w-[30rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
+    <div className="pointer-events-auto max-w-[23rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[0.65rem] uppercase tracking-[0.3em] text-cyan-100/70">

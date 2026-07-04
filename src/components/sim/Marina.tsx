@@ -328,7 +328,7 @@ function BerthMarker({
         fontSize={1.15}
         anchorX="center"
         anchorY="middle"
-        rotation={[-Math.PI / 2, 0, 0]}
+        rotation={[-Math.PI / 2, 0, Math.PI]}
         position={[0, 0.02, -berth.lengthM * 0.5 - 1.4]}
         fillOpacity={active ? 0.95 : 0.6}
       >

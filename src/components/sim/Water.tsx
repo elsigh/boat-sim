@@ -2,7 +2,7 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
-import { Color, ShaderMaterial, Vector3 } from "three";
+import { Color, Mesh, ShaderMaterial, Vector3 } from "three";
 
 const vertexShader = `
   varying vec2 vUv;
@@ -77,13 +77,14 @@ const fragmentShader = `
 
     // distance haze toward the horizon color
     float cameraDistance = length(cameraPosition - vWorldPosition);
-    color = mix(color, uHorizon, smoothstep(120.0, 340.0, cameraDistance));
+    color = mix(color, uHorizon, smoothstep(220.0, 640.0, cameraDistance));
 
     gl_FragColor = vec4(color, 0.965);
   }
 `;
 
 export function Water() {
+  const meshRef = useRef<Mesh | null>(null);
   const materialRef = useRef<ShaderMaterial | null>(null);
   const uniforms = useMemo(
     () => ({
@@ -97,15 +98,22 @@ export function Water() {
     [],
   );
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (materialRef.current) {
       materialRef.current.uniforms.uTime.value += delta;
+    }
+
+    // Follow the camera so the sea is effectively infinite. The ripple noise
+    // samples world position, so sliding the plane is seamless.
+    if (meshRef.current) {
+      meshRef.current.position.x = state.camera.position.x;
+      meshRef.current.position.z = state.camera.position.z;
     }
   });
 
   return (
-    <mesh rotation-x={-Math.PI / 2} position={[0, -0.05, 0]}>
-      <planeGeometry args={[760, 760, 1, 1]} />
+    <mesh ref={meshRef} rotation-x={-Math.PI / 2} position={[0, -0.05, 0]}>
+      <planeGeometry args={[1400, 1400, 1, 1]} />
       <shaderMaterial
         ref={materialRef}
         uniforms={uniforms}

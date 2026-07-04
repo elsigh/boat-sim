@@ -5,7 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { Sky } from "@react-three/drei";
 import { Physics, type RapierRigidBody } from "@react-three/rapier";
 import type { WheelEventHandler } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BOAT_CATALOG, DEFAULT_BOAT_SLUG, getBoatProfile } from "@/lib/boats/catalog";
 import { useGamepad } from "@/hooks/useGamepad";
@@ -62,6 +62,30 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   const [planZoom, setPlanZoom] = useState(48);
   const [selectedBoatSlug, setSelectedBoatSlug] = useState(initialBoatSlug ?? DEFAULT_BOAT_SLUG);
   const [conditionsMode, setConditionsMode] = useState<"typical" | "calm">("typical");
+  const [hudVisible, setHudVisible] = useState(true);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "h" || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+
+      setHudVisible((value) => !value);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const [softwareEngineControls, setSoftwareEngineControls] = useState({
     portMasterOn: false,
     starboardMasterOn: false,
@@ -297,7 +321,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         gl={{ antialias: true }}
       >
         <color attach="background" args={["#a9c2d2"]} />
-        <fog attach="fog" args={["#a9c2d2", 90, 520]} />
+        <fog attach="fog" args={["#a9c2d2", 150, 760]} />
         <Sky
           distance={4000}
           sunPosition={[240, 180, 130]}
@@ -371,7 +395,9 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         availableBoats={BOAT_CATALOG}
         conditionsMode={conditionsMode}
         guidance={guidance}
+        hudVisible={hudVisible}
         marina={marina}
+        onToggleHud={() => setHudVisible((value) => !value)}
         onConditionsModeChange={setConditionsMode}
         onEnableAudio={engineAudio.enableAudio}
         onEnableEngines={handleEnableBothEngines}
