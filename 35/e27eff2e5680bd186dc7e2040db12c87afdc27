@@ -1,0 +1,27 @@
+src/components/sim/Boat.tsx
+  s_503510a5adb0be::t_25999deabc6ead 22
+  s_503510a5adb0be::t_14e59f89536c26 10-11
+  s_503510a5adb0be::t_75f2fd85da44e4 245
+src/components/sim/BoatVisual.tsx
+  s_503510a5adb0be::t_203ca90db26b8e 1-18,23-26,29-239,241-246,248-251,253-256,258-387,389,391,394-428,431-438,442-461
+  s_503510a5adb0be::t_5c1b03cf14ffe8 388,390,392-393
+  s_503510a5adb0be::t_c8886c16d1327c 19-22,27-28
+  s_503510a5adb0be::t_0762d0daa1f3ec 240,247,252,257
+  s_503510a5adb0be::t_6cfee83d3f74ba 429-430,439-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "35e27eff2e5680bd186dc7e2040db12c87afdc27",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
