@@ -7,8 +7,8 @@ import {
   RoundCuboidCollider,
   useBeforePhysicsStep,
 } from "@react-three/rapier";
-import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
-import { Color, ExtrudeGeometry, Quaternion, Shape, Vector3 } from "three";
+import { type MutableRefObject, useEffect, useRef } from "react";
+import { Quaternion, Vector3 } from "three";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
@@ -19,6 +19,7 @@ import {
 } from "@/lib/sim/boat-physics";
 import type { SimulationEnvironment } from "@/lib/sim/boat-physics";
 
+import { BoatVisual } from "./BoatVisual";
 import { WashEffects } from "./WashEffects";
 
 type BoatProps = {
@@ -52,41 +53,6 @@ const HULL_LINEAR_DAMPING = 0.015;
 const HULL_ANGULAR_DAMPING = 0.08;
 
 type ResetPose = NonNullable<BoatProps["resetRequest"]>;
-
-function createTaperedDeckGeometry({
-  aftHalfWidth,
-  bowHalfWidth,
-  height,
-  length,
-}: {
-  aftHalfWidth: number;
-  bowHalfWidth: number;
-  height: number;
-  length: number;
-}) {
-  const shape = new Shape();
-
-  shape.moveTo(-aftHalfWidth, -length * 0.5);
-  shape.lineTo(aftHalfWidth, -length * 0.5);
-  shape.lineTo(bowHalfWidth, length * 0.5);
-  shape.lineTo(-bowHalfWidth, length * 0.5);
-  shape.closePath();
-
-  const geometry = new ExtrudeGeometry(shape, {
-    depth: height,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.04,
-    bevelThickness: 0.04,
-    steps: 1,
-  });
-
-  geometry.rotateX(Math.PI / 2);
-  geometry.translate(0, height * 0.5, 0);
-  geometry.computeVertexNormals();
-
-  return geometry;
-}
 
 function applyResetPose(body: RapierRigidBody, resetRequest: ResetPose) {
   const radians = (resetRequest.yawDeg * Math.PI) / 180;
@@ -140,112 +106,6 @@ export function Boat({
   useEffect(() => {
     environmentRef.current = environment;
   }, [environment]);
-
-  const hullGeometry = useMemo(() => {
-    const halfBeam = boat.beamM * 0.5;
-    const length = boat.lengthM * 0.95;
-    const shape = new Shape();
-
-    shape.moveTo(0, length * 0.5);
-    shape.bezierCurveTo(
-      halfBeam * 0.22,
-      length * 0.48,
-      halfBeam * 0.88,
-      length * 0.26,
-      halfBeam * 0.92,
-      -length * 0.18,
-    );
-    shape.quadraticCurveTo(halfBeam * 0.9, -length * 0.5, 0, -length * 0.5);
-    shape.quadraticCurveTo(
-      -halfBeam * 0.9,
-      -length * 0.5,
-      -halfBeam * 0.92,
-      -length * 0.18,
-    );
-    shape.bezierCurveTo(
-      -halfBeam * 0.88,
-      length * 0.26,
-      -halfBeam * 0.22,
-      length * 0.48,
-      0,
-      length * 0.5,
-    );
-
-    const geometry = new ExtrudeGeometry(shape, {
-      depth: 1.32,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      bevelSize: 0.12,
-      bevelThickness: 0.18,
-      steps: 1,
-    });
-
-    geometry.rotateX(Math.PI / 2);
-    geometry.translate(0, 0.34, 0);
-    geometry.computeVertexNormals();
-
-    return geometry;
-  }, [boat.beamM, boat.lengthM]);
-  const deckhouseGeometry = useMemo(() => {
-    return createTaperedDeckGeometry({
-      aftHalfWidth: boat.beamM * boat.visual.deckhouseAftHalfWidthRatio,
-      bowHalfWidth: boat.beamM * boat.visual.deckhouseBowHalfWidthRatio,
-      height: boat.visual.deckhouseHeight,
-      length: boat.lengthM * boat.visual.deckhouseLengthRatio,
-    });
-  }, [
-    boat.beamM,
-    boat.lengthM,
-    boat.visual.deckhouseAftHalfWidthRatio,
-    boat.visual.deckhouseBowHalfWidthRatio,
-    boat.visual.deckhouseLengthRatio,
-    boat.visual.deckhouseHeight,
-  ]);
-  const upperHelmGeometry = useMemo(() => {
-    const sternHalfWidth = boat.beamM * boat.visual.upperHelmWidthRatio * 0.46;
-    const bowHalfWidth = sternHalfWidth * 0.78;
-
-    return createTaperedDeckGeometry({
-      aftHalfWidth: sternHalfWidth,
-      bowHalfWidth,
-      height: boat.visual.upperHelmHeight,
-      length: boat.lengthM * boat.visual.upperHelmLengthRatio,
-    });
-  }, [
-    boat.beamM,
-    boat.lengthM,
-    boat.visual.upperHelmHeight,
-    boat.visual.upperHelmLengthRatio,
-    boat.visual.upperHelmWidthRatio,
-  ]);
-  const flybridgeGeometry = useMemo(() => {
-    const sternHalfWidth = boat.beamM * boat.visual.flybridgeWidthRatio * 0.46;
-    const bowHalfWidth = sternHalfWidth * 0.84;
-
-    return createTaperedDeckGeometry({
-      aftHalfWidth: sternHalfWidth,
-      bowHalfWidth,
-      height: boat.visual.flybridgeHeight,
-      length: boat.lengthM * boat.visual.flybridgeLengthRatio,
-    });
-  }, [
-    boat.beamM,
-    boat.lengthM,
-    boat.visual.flybridgeHeight,
-    boat.visual.flybridgeLengthRatio,
-    boat.visual.flybridgeWidthRatio,
-  ]);
-  const aftRoofGeometry = useMemo(() => {
-    const sternHalfWidth = boat.beamM * 0.24;
-    const bowHalfWidth = sternHalfWidth * 0.88;
-
-    return createTaperedDeckGeometry({
-      aftHalfWidth: sternHalfWidth,
-      bowHalfWidth,
-      height: 0.12,
-      length: boat.lengthM * boat.visual.aftDeckLengthRatio,
-    });
-  }, [boat.beamM, boat.lengthM, boat.visual.aftDeckLengthRatio]);
 
   useEffect(() => {
     controlsRef.current = controls;
@@ -382,127 +242,7 @@ export function Boat({
         restitutionCombineRule={CoefficientCombineRule.Min}
       />
 
-      <group>
-        <mesh castShadow receiveShadow geometry={hullGeometry}>
-          <meshStandardMaterial
-            color={new Color(boat.visual.hullColor)}
-            metalness={0.08}
-            roughness={0.72}
-          />
-        </mesh>
-
-        <mesh
-          castShadow
-          receiveShadow
-          geometry={deckhouseGeometry}
-          position={[0, 0.56, boat.lengthM * boat.visual.deckhouseOffsetZRatio]}
-        >
-          <meshStandardMaterial
-            color={new Color(boat.visual.houseColor)}
-            metalness={0.08}
-            roughness={0.74}
-          />
-        </mesh>
-
-        <mesh
-          castShadow
-          receiveShadow
-          geometry={upperHelmGeometry}
-          position={[0, boat.visual.deckhouseHeight + 0.42, boat.lengthM * boat.visual.upperHelmOffsetZRatio]}
-        >
-          <meshStandardMaterial
-            color={new Color(boat.visual.roofColor)}
-            metalness={0.08}
-            roughness={0.5}
-          />
-        </mesh>
-
-        <mesh
-          castShadow
-          receiveShadow
-          geometry={flybridgeGeometry}
-          position={[0, boat.visual.flybridgeHeight + 0.3, boat.lengthM * boat.visual.flybridgeOffsetZRatio]}
-        >
-          <meshStandardMaterial
-            color={new Color(boat.visual.houseColor)}
-            metalness={0.08}
-            roughness={0.56}
-          />
-        </mesh>
-
-        <mesh
-          castShadow
-          receiveShadow
-          geometry={aftRoofGeometry}
-          position={[0, 1.18, boat.lengthM * boat.visual.aftDeckOffsetZRatio]}
-        >
-          <meshStandardMaterial
-            color={new Color(boat.visual.roofColor)}
-            metalness={0.1}
-            roughness={0.52}
-          />
-        </mesh>
-
-        <mesh castShadow position={[0, boat.visual.deckhouseHeight + 1.12, boat.lengthM * boat.visual.mastOffsetZRatio]}>
-          <boxGeometry args={[0.16, 0.92, 0.16]} />
-          <meshStandardMaterial color={new Color(boat.visual.roofColor)} metalness={0.18} roughness={0.42} />
-        </mesh>
-
-        <mesh position={[-boat.beamM * 0.32, -0.56, boat.lengthM * 0.3]}>
-          <boxGeometry args={[0.16, 0.16, 0.92]} />
-          <meshStandardMaterial color={new Color(boat.visual.railColor)} metalness={0.35} roughness={0.3} />
-        </mesh>
-
-        <mesh position={[boat.beamM * 0.32, -0.56, boat.lengthM * 0.3]}>
-          <boxGeometry args={[0.16, 0.16, 0.92]} />
-          <meshStandardMaterial color={new Color(boat.visual.railColor)} metalness={0.35} roughness={0.3} />
-        </mesh>
-
-        <mesh position={[0, -0.46, -boat.lengthM * 0.24]}>
-          <boxGeometry args={[boat.beamM * 0.16, 0.56, boat.lengthM * 0.44]} />
-          <meshStandardMaterial color={new Color("#c7b18b")} metalness={0.05} roughness={0.86} />
-        </mesh>
-
-        <mesh position={[0, boat.visual.deckhouseHeight * 0.78, boat.lengthM * boat.visual.deckhouseOffsetZRatio]}>
-          <boxGeometry args={[boat.beamM * 0.34, 0.16, boat.lengthM * 0.1]} />
-          <meshStandardMaterial color={new Color(boat.visual.windowColor)} metalness={0.35} roughness={0.22} />
-        </mesh>
-
-        {/* fenders along both rails — this is a docking boat, after all */}
-        {[-0.32, -0.05, 0.24].map((zRatio) =>
-          [-1, 1].map((side) => (
-            <mesh
-              key={`fender-${zRatio}-${side}`}
-              position={[
-                side * boat.beamM * 0.485,
-                -0.15,
-                boat.lengthM * zRatio,
-              ]}
-            >
-              <capsuleGeometry args={[0.14, 0.42, 4, 10]} />
-              <meshStandardMaterial color="#f2f4f2" roughness={0.6} />
-            </mesh>
-          )),
-        )}
-
-        {boat.visual.superstructureStyle === "expedition" ? (
-          <>
-            <mesh position={[0, 1.08, boat.lengthM * 0.18]}>
-              <boxGeometry args={[boat.beamM * 0.66, 0.56, boat.lengthM * 0.08]} />
-              <meshStandardMaterial color={new Color(boat.visual.houseColor)} metalness={0.08} roughness={0.62} />
-            </mesh>
-            <mesh position={[0, boat.visual.deckhouseHeight + 0.18, boat.lengthM * 0.06]}>
-              <boxGeometry args={[boat.beamM * 0.4, 0.16, boat.lengthM * 0.06]} />
-              <meshStandardMaterial color={new Color(boat.visual.windowColor)} metalness={0.32} roughness={0.2} />
-            </mesh>
-          </>
-        ) : (
-          <mesh position={[0, 0.92, boat.lengthM * 0.06]}>
-            <boxGeometry args={[boat.beamM * 0.38, 0.22, boat.lengthM * 0.1]} />
-            <meshStandardMaterial color={new Color(boat.visual.windowColor)} metalness={0.32} roughness={0.2} />
-          </mesh>
-        )}
-      </group>
+      <BoatVisual boat={boat} />
 
       <WashEffects boat={boat} controlsRef={controlsRef} engineStateRef={engineStateRef} />
     </RigidBody>
