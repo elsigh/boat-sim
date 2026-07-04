@@ -143,8 +143,8 @@ export function DockingOverlay({
         />
       ) : (
       <div className="flex h-full flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between">
-        <div className="flex min-h-0 flex-col gap-3 lg:h-full lg:w-[clamp(19rem,25vw,23rem)]">
-          <div className="pointer-events-auto max-w-[23rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
+        <div className="flex min-h-0 flex-col gap-3 lg:h-full lg:w-[clamp(19rem,25vw,23rem)] lg:overflow-y-auto">
+          <div className="pointer-events-auto max-w-[23rem] shrink-0 rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[0.65rem] uppercase tracking-[0.3em] text-fuchsia-100/70">
@@ -221,10 +221,10 @@ export function DockingOverlay({
             telemetry={telemetry}
           />
 
-          <div className="pointer-events-auto min-h-0 max-w-[23rem]">
+          <div className="pointer-events-auto min-h-0 max-w-[23rem] lg:flex lg:min-h-[15rem] lg:flex-1 lg:flex-col">
             <ScenarioCard
               activeLegIndex={activeLegIndex}
-              className="lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto"
+              className="lg:max-h-full lg:overflow-hidden"
               mapBoatCoordinate={mapBoatCoordinate}
               onSelectLeg={onSelectLeg}
               onResetToStop={onResetToStop}
@@ -233,7 +233,7 @@ export function DockingOverlay({
           </div>
         </div>
 
-        <div className="pointer-events-auto flex max-w-[17.5rem] flex-col gap-2 lg:h-full lg:w-[17.5rem]">
+        <div className="pointer-events-auto flex max-w-[17.5rem] flex-col gap-2 lg:h-full lg:min-h-0 lg:w-[17.5rem] lg:overflow-y-auto">
           <div className="rounded-2xl border border-white/12 bg-slate-950/74 px-3 py-2 shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between gap-4">
               <p className="text-[0.65rem] uppercase tracking-[0.3em] text-emerald-100/70">
@@ -542,7 +542,7 @@ function DockingPracticePanel({
   const windRelativeDeg = windTowardCompassDeg - telemetry.headingDeg;
 
   return (
-    <div className="pointer-events-auto max-w-[23rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
+    <div className="pointer-events-auto max-w-[23rem] shrink-0 rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[0.65rem] uppercase tracking-[0.3em] text-cyan-100/70">

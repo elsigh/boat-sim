@@ -108,7 +108,7 @@ export function ScenarioCard({
       ) : null}
 
       {!collapsed ? (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <RouteMiniMap
             activeLegIndex={activeLegIndex}
             boatCoordinate={mapBoatCoordinate}
@@ -145,7 +145,7 @@ export function ScenarioCard({
               </button>
             ))}
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   );
