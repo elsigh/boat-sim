@@ -1,0 +1,34 @@
+src/lib/sim/boat-physics.ts
+  s_503510a5adb0be::t_d23dd3d6eb8944 314-317,319-320
+  s_503510a5adb0be::t_5d06b7f7118476 141-143,145
+  s_503510a5adb0be::t_2256fd4672e2bd 218-219,224,237,246,249
+src/components/sim/WashEffects.tsx
+  s_503510a5adb0be::t_5fbc63414e4e62 118,123,129
+  s_503510a5adb0be::t_4f6f1f411f6da3 139-141
+src/lib/sim/berth-guidance.ts
+  s_503510a5adb0be::t_8567c4dc893c40 32-34,38-40,43-45
+src/components/sim/BoatSimulator.tsx
+  s_503510a5adb0be::t_9fe4b15dde214c 310,313
+src/lib/marinas/index.ts
+  s_503510a5adb0be::t_c32ae5b4e7761d 10-69,79,92
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_8d3c34a45486ad 538-542
+src/lib/marinas/squalicum.ts
+  s_503510a5adb0be::t_78640210c569b2 154,160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1890ccafe8741a9f34e804aded0ad9b330b2ce5a",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
