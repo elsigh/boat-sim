@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { PointerEventHandler, WheelEventHandler } from "react";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
@@ -21,9 +21,11 @@ type DockingOverlayProps = {
   availableBoats: BoatProfile[];
   conditionsMode: "typical" | "calm";
   controls: GamepadSnapshot;
+  currentStopId: string;
   engineState: TwinEngineState;
   guidance: BerthGuidance | null;
   hardwareHelmConnected: boolean;
+  onSelectStop: (stopId: string) => void;
   hudVisible: boolean;
   leversSwapped: boolean;
   mapBoatCoordinate: {
@@ -84,9 +86,11 @@ export function DockingOverlay({
   availableBoats,
   conditionsMode,
   controls,
+  currentStopId,
   engineState,
   guidance,
   hardwareHelmConnected,
+  onSelectStop,
   hudVisible,
   leversSwapped,
   mapBoatCoordinate,
@@ -211,11 +215,14 @@ export function DockingOverlay({
 
           <DockingPracticePanel
             conditionsMode={conditionsMode}
+            currentStopId={currentStopId}
             guidance={guidance}
             marina={marina}
             onConditionsModeChange={onConditionsModeChange}
             onSelectBerth={onSelectBerth}
             onSelectSpawn={onSelectSpawn}
+            onSelectStop={onSelectStop}
+            scenario={scenario}
             selectedBerth={selectedBerth}
             selectedSpawn={selectedSpawn}
             telemetry={telemetry}
@@ -507,26 +514,47 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
 
 function DockingPracticePanel({
   conditionsMode,
+  currentStopId,
   guidance,
   marina,
   onConditionsModeChange,
   onSelectBerth,
   onSelectSpawn,
+  onSelectStop,
+  scenario,
   selectedBerth,
   selectedSpawn,
   telemetry,
 }: {
   conditionsMode: "typical" | "calm";
+  currentStopId: string;
   guidance: BerthGuidance | null;
   marina: MarinaLayout;
   onConditionsModeChange: (mode: "typical" | "calm") => void;
   onSelectBerth: (berthId: string) => void;
   onSelectSpawn: (spawnId: string) => void;
+  onSelectStop: (stopId: string) => void;
+  scenario: CruiseScenario;
   selectedBerth: Berth | null;
   selectedSpawn: SpawnPoint;
   telemetry: DockingTelemetry;
 }) {
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const locationStops = useMemo(() => {
+    const seenScenes = new Set<string>();
+
+    return scenario.stops.filter((stop) => {
+      if (seenScenes.has(stop.sceneId)) {
+        return false;
+      }
+
+      seenScenes.add(stop.sceneId);
+      return true;
+    });
+  }, [scenario.stops]);
+  const currentSceneId = scenario.stops.find((stop) => stop.id === currentStopId)?.sceneId;
+  const selectedLocationId =
+    locationStops.find((stop) => stop.sceneId === currentSceneId)?.id ?? locationStops[0]?.id;
   const isDeparture = selectedSpawn.kind === "departure";
   const docked = !isDeparture && Boolean(guidance?.docked);
   const departed = isDeparture && guidance !== null && guidance.rangeM > 25;
@@ -543,13 +571,10 @@ function DockingPracticePanel({
 
   return (
     <div className="pointer-events-auto max-w-[23rem] shrink-0 rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[0.65rem] uppercase tracking-[0.3em] text-cyan-100/70">
-            Docking Practice
-          </p>
-          <p className="mt-1 truncate text-sm font-semibold text-white">{marina.name}</p>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="whitespace-nowrap text-[0.65rem] uppercase tracking-[0.22em] text-cyan-100/70">
+          Docking Practice
+        </p>
         {marina.vhfChannel ? (
           <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-slate-300">
             VHF {marina.vhfChannel}
@@ -558,6 +583,26 @@ function DockingPracticePanel({
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-2">
+        <label className="block">
+          <span className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-400">
+            Location
+          </span>
+          <select
+            value={selectedLocationId}
+            onChange={(event) => onSelectStop(event.target.value)}
+            className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-100 outline-none"
+          >
+            {locationStops.map((stop) => (
+              <option key={stop.id} value={stop.id}>
+                {stop.name}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[0.62rem] leading-snug text-slate-400">
+            {marina.name}
+          </span>
+        </label>
+
         <label className="block">
           <span className="text-[0.6rem] uppercase tracking-[0.2em] text-slate-400">
             Exercise

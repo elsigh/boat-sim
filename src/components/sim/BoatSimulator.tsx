@@ -342,6 +342,33 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       setSelectedBerthId(berthId);
     }
   };
+  const applyStop = useCallback(
+    (stop: (typeof scenario.stops)[number]) => {
+      const nextMarina = getMarinaLayout(stop.sceneId);
+      const spawn = defaultSpawnFor(nextMarina);
+
+      setCurrentStopId(stop.id);
+      setSelectedSpawnId(spawn.id);
+      setSelectedBerthId(spawn.berthId);
+      resetBoatTo(spawn, stop.coordinate);
+
+      const legIndex = scenario.legs.findIndex((leg) => leg.fromStopId === stop.id);
+
+      if (legIndex >= 0) {
+        setActiveLegIndex(legIndex);
+      }
+    },
+    [resetBoatTo, scenario],
+  );
+
+  const handleSelectStop = (stopId: string) => {
+    const stop = scenario.stops.find((entry) => entry.id === stopId);
+
+    if (stop) {
+      applyStop(stop);
+    }
+  };
+
   const handleResetToStop = (stopId: string) => {
     const stop = scenario.stops.find((entry) => entry.id === stopId);
 
@@ -349,25 +376,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       return;
     }
 
-    const confirmed = window.confirm(`Move the boat to ${stop.name}?`);
-
-    if (!confirmed) {
+    if (!window.confirm(`Move the boat to ${stop.name}?`)) {
       return;
     }
 
-    const nextMarina = getMarinaLayout(stop.sceneId);
-    const spawn = defaultSpawnFor(nextMarina);
-
-    setCurrentStopId(stop.id);
-    setSelectedSpawnId(spawn.id);
-    setSelectedBerthId(spawn.berthId);
-    resetBoatTo(spawn, stop.coordinate);
-
-    const legIndex = scenario.legs.findIndex((leg) => leg.fromStopId === stop.id);
-
-    if (legIndex >= 0) {
-      setActiveLegIndex(legIndex);
-    }
+    applyStop(stop);
   };
 
   const waylinePoints = useMemo(() => {
@@ -460,8 +473,10 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         activeLegIndex={activeLegIndex}
         availableBoats={BOAT_CATALOG}
         conditionsMode={conditionsMode}
+        currentStopId={currentStop.id}
         guidance={guidance}
         hardwareHelmConnected={hardwareHelmConnected}
+        onSelectStop={handleSelectStop}
         hudVisible={hudVisible}
         leversSwapped={leversSwapped}
         marina={marina}
