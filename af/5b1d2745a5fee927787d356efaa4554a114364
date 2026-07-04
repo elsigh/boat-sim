@@ -1,0 +1,27 @@
+src/components/sim/BoatSimulator.tsx
+  s_503510a5adb0be::t_3f3e9f3c77ee13 66-70
+  s_503510a5adb0be::t_d2dd2e97593b9c 158-160,164
+  s_503510a5adb0be::t_a6a65f3c6fa727 71-78
+  s_503510a5adb0be::t_04a2516427fd82 414,417
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_bdcc289c5aec73 369-371,373-385
+  s_503510a5adb0be::t_12e172836ccf98 86,90
+  s_503510a5adb0be::t_0d9d3b46ec5f9b 372
+  s_503510a5adb0be::t_5d31c449deb1dc 27,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "af5b1d2745a5fee927787d356efaa4554a114364",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
