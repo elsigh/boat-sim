@@ -34,6 +34,15 @@ export type UseGamepadOptions = {
     port: string;
     starboard: string;
   };
+  /**
+   * Raw axis values at each lever's physical idle detent, for throttle
+   * quadrants whose resting position is not axis zero. When set, lever travel
+   * above idle maps to ahead and below idle maps to astern.
+   */
+  quadrantIdle?: {
+    port: number;
+    starboard: number;
+  } | null;
 };
 
 export type GamepadSnapshot = {
@@ -83,6 +92,7 @@ const DEFAULT_OPTIONS: Required<UseGamepadOptions> = {
     port: "a",
     starboard: "d",
   },
+  quadrantIdle: null,
 };
 
 const SNAPSHOT_CHANGE_EPSILON = 0.0005;
@@ -188,6 +198,26 @@ function normalizeAxis(value: number | undefined, deadzone: number, invert: bool
   return clampUnit(applyDeadzone(adjusted, deadzone));
 }
 
+function quadrantAxisToThrottle(
+  value: number | undefined,
+  idleRaw: number,
+  deadzone: number,
+  invert: boolean,
+) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+
+  const position = invert ? -value : value;
+  const idle = invert ? -idleRaw : idleRaw;
+  const aheadSpan = Math.max(0.1, 1 - idle);
+  const asternSpan = Math.max(0.1, idle + 1);
+  const centered =
+    position >= idle ? (position - idle) / aheadSpan : (position - idle) / asternSpan;
+
+  return clampUnit(applyDeadzone(clampUnit(centered), deadzone));
+}
+
 function axisToUnsignedPosition(value: number | undefined, invert: boolean) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return 0.5;
@@ -259,18 +289,32 @@ function readGamepad(
 
   const portThrottle =
     splitThrottle?.portThrottle ??
-    normalizeAxis(
-      gamepad.axes[options.throttleAxes.port],
-      options.deadzone,
-      options.invertThrottleAxes,
-    );
+    (options.quadrantIdle
+      ? quadrantAxisToThrottle(
+          gamepad.axes[options.throttleAxes.port],
+          options.quadrantIdle.port,
+          options.deadzone,
+          options.invertThrottleAxes,
+        )
+      : normalizeAxis(
+          gamepad.axes[options.throttleAxes.port],
+          options.deadzone,
+          options.invertThrottleAxes,
+        ));
   const starboardThrottle =
     splitThrottle?.starboardThrottle ??
-    normalizeAxis(
-      gamepad.axes[options.throttleAxes.starboard],
-      options.deadzone,
-      options.invertThrottleAxes,
-    );
+    (options.quadrantIdle
+      ? quadrantAxisToThrottle(
+          gamepad.axes[options.throttleAxes.starboard],
+          options.quadrantIdle.starboard,
+          options.deadzone,
+          options.invertThrottleAxes,
+        )
+      : normalizeAxis(
+          gamepad.axes[options.throttleAxes.starboard],
+          options.deadzone,
+          options.invertThrottleAxes,
+        ));
 
   const bowFromButtons =
     (gamepad.buttons[options.bowThrusterButtons.starboard]?.value ?? 0) -

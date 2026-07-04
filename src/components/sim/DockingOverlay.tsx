@@ -23,6 +23,7 @@ type DockingOverlayProps = {
   controls: GamepadSnapshot;
   engineState: TwinEngineState;
   guidance: BerthGuidance | null;
+  hardwareHelmConnected: boolean;
   hudVisible: boolean;
   leversSwapped: boolean;
   mapBoatCoordinate: {
@@ -30,9 +31,12 @@ type DockingOverlayProps = {
     lon: number;
   } | null;
   marina: MarinaLayout;
+  onCalibrateQuadrantIdle: () => void;
+  onClearQuadrantIdle: () => void;
   onToggleHud: () => void;
   onToggleLeverSwap: () => void;
   onBoatChange: (slug: string) => void;
+  quadrantIdleCalibrated: boolean;
   onConditionsModeChange: (mode: "typical" | "calm") => void;
   onEnableEngines: () => void;
   onEnableAudio: (nextEnabled?: boolean) => void;
@@ -82,13 +86,17 @@ export function DockingOverlay({
   controls,
   engineState,
   guidance,
+  hardwareHelmConnected,
   hudVisible,
   leversSwapped,
   mapBoatCoordinate,
   marina,
+  onCalibrateQuadrantIdle,
+  onClearQuadrantIdle,
   onToggleHud,
   onToggleLeverSwap,
   onBoatChange,
+  quadrantIdleCalibrated,
   onConditionsModeChange,
   onEnableEngines,
   onEnableAudio,
@@ -383,6 +391,40 @@ export function DockingOverlay({
                 Use if your port lever drives the starboard engine
               </span>
             </button>
+
+            <div className="mt-1.5 flex items-stretch gap-1.5">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onPointerDown={stopPointerPropagation}
+                onClick={onCalibrateQuadrantIdle}
+                disabled={!hardwareHelmConnected}
+                className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
+                  !hardwareHelmConnected
+                    ? "cursor-not-allowed border-white/6 bg-white/5 text-slate-600"
+                    : quadrantIdleCalibrated
+                      ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                      : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                }`}
+              >
+                {quadrantIdleCalibrated ? "Idle calibrated ✓" : "Set lever idle"}
+                <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
+                  Put both levers at their idle detent, then click
+                </span>
+              </button>
+              {quadrantIdleCalibrated ? (
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  onPointerDown={stopPointerPropagation}
+                  onClick={onClearQuadrantIdle}
+                  aria-label="Clear lever idle calibration"
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 text-[0.6rem] uppercase text-slate-400 transition hover:bg-white/10"
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <HelmInfoPanel telemetry={telemetry} />

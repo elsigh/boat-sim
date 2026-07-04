@@ -68,6 +68,31 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       typeof window !== "undefined" &&
       window.localStorage.getItem("boat-sim:levers-swapped") === "1",
   );
+  const [quadrantIdle, setQuadrantIdle] = useState<{
+    port: number;
+    starboard: number;
+  } | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    try {
+      const stored = window.localStorage.getItem("boat-sim:quadrant-idle");
+      const parsed = stored ? JSON.parse(stored) : null;
+
+      if (
+        parsed &&
+        typeof parsed.port === "number" &&
+        typeof parsed.starboard === "number"
+      ) {
+        return parsed;
+      }
+    } catch {
+      // fall through to uncalibrated
+    }
+
+    return null;
+  });
 
   const handleToggleLeverSwap = () => {
     setLeversSwapped((value) => {
@@ -151,19 +176,44 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     () => getBoatProfile(selectedBoatSlug),
     [selectedBoatSlug],
   );
+  const throttleAxes = useMemo(
+    () => (leversSwapped ? { port: 1, starboard: 0 } : { port: 0, starboard: 1 }),
+    [leversSwapped],
+  );
   const controls = useGamepad(
     useMemo(
       () => ({
         throttleMode: "dualAxis" as const,
-        throttleAxes: leversSwapped
-          ? { port: 1, starboard: 0 }
-          : { port: 0, starboard: 1 },
+        throttleAxes,
         invertThrottleAxes: true,
         bowThrusterButtons: { port: 4, starboard: 5 },
+        quadrantIdle,
       }),
-      [leversSwapped],
+      [quadrantIdle, throttleAxes],
     ),
   );
+
+  const hardwareHelmConnected =
+    controls.connected && controls.gamepadId !== "Keyboard Helm";
+
+  const handleCalibrateQuadrantIdle = () => {
+    if (!hardwareHelmConnected) {
+      return;
+    }
+
+    const next = {
+      port: controls.rawAxes[throttleAxes.port] ?? 0,
+      starboard: controls.rawAxes[throttleAxes.starboard] ?? 0,
+    };
+
+    setQuadrantIdle(next);
+    window.localStorage.setItem("boat-sim:quadrant-idle", JSON.stringify(next));
+  };
+
+  const handleClearQuadrantIdle = () => {
+    setQuadrantIdle(null);
+    window.localStorage.removeItem("boat-sim:quadrant-idle");
+  };
 
   const engineState = useEngineState(controls, softwareEngineControls);
   const engineAudio = useEngineAudio(engineState);
@@ -410,11 +460,15 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         availableBoats={BOAT_CATALOG}
         conditionsMode={conditionsMode}
         guidance={guidance}
+        hardwareHelmConnected={hardwareHelmConnected}
         hudVisible={hudVisible}
         leversSwapped={leversSwapped}
         marina={marina}
+        onCalibrateQuadrantIdle={handleCalibrateQuadrantIdle}
+        onClearQuadrantIdle={handleClearQuadrantIdle}
         onToggleHud={() => setHudVisible((value) => !value)}
         onToggleLeverSwap={handleToggleLeverSwap}
+        quadrantIdleCalibrated={quadrantIdle !== null}
         onConditionsModeChange={setConditionsMode}
         onEnableAudio={engineAudio.enableAudio}
         onEnableEngines={handleEnableBothEngines}
