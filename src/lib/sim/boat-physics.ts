@@ -138,10 +138,11 @@ function throttleToThrust(
   return baseThrust * slipReduction;
 }
 
-// Local +x is starboard. A left-handed prop in astern walks the stern to
-// starboard (+x); a right-handed prop walks it to port (-x).
+// In this right-handed, y-up, z-forward frame the boat's starboard side is
+// local -x (and world +x renders as west). A left-handed prop in astern walks
+// the stern to starboard (-x); a right-handed prop walks it to port (+x).
 function reversePropWalkDirection(handedness: PropellerHandedness) {
-  return handedness === "left" ? 1 : -1;
+  return handedness === "left" ? -1 : 1;
 }
 
 export function buildEnvironment(input: {
@@ -214,13 +215,13 @@ export function computeBoatPhysics(
         propWalkFlowFactor
       : 0;
 
-  // Local +x is starboard, so the port engine sits at -x. Port ahead must
-  // swing the bow to starboard, and vice versa.
+  // Local port is +x, starboard is -x. Port ahead must swing the bow to
+  // starboard, and vice versa.
   const portApplicationLocal = {
     name: "port-engine",
     force: new Vector3(portPropWalk, 0, portThrust),
     point: new Vector3(
-      -config.engineLateralOffsetM *
+      config.engineLateralOffsetM *
         (input.portThrottle < 0
           ? config.reverseYawAuthorityScale
           : config.forwardYawAuthorityScale),
@@ -233,7 +234,7 @@ export function computeBoatPhysics(
     name: "starboard-engine",
     force: new Vector3(starboardPropWalk, 0, starboardThrust),
     point: new Vector3(
-      config.engineLateralOffsetM *
+      -config.engineLateralOffsetM *
         (input.starboardThrottle < 0
           ? config.reverseYawAuthorityScale
           : config.forwardYawAuthorityScale),
@@ -242,9 +243,10 @@ export function computeBoatPhysics(
     ),
   };
 
+  // Positive command pushes the bow to starboard (-x).
   const bowThrusterApplicationLocal = {
     name: "bow-thruster",
-    force: new Vector3(input.bowThruster * config.maxBowThrusterForceN, 0, 0),
+    force: new Vector3(-input.bowThruster * config.maxBowThrusterForceN, 0, 0),
     point: new Vector3(0, 0, config.bowThrusterLongitudinalOffsetM),
   };
 
@@ -309,10 +311,13 @@ export function computeBoatPhysics(
     centerForce: toWorldVector(waterDragLocal, state.worldRotation),
     yawTorque: toWorldVector(yawTorqueLocal, state.worldRotation),
     telemetry: {
-      headingDeg: normalizeDegrees((Math.atan2(worldForward.x, worldForward.z) * 180) / Math.PI),
+      // Compass conventions: +x is world-west, so true heading needs -x, a
+      // starboard (right) turn is negative yaw about +y, and starboard drift
+      // is negative local x.
+      headingDeg: normalizeDegrees((Math.atan2(-worldForward.x, worldForward.z) * 180) / Math.PI),
       speedKnots: toKnots(state.worldLinearVelocity.length()),
-      yawRateDegPerSecond: (state.yawRateRadPerSecond * 180) / Math.PI,
-      lateralDriftKnots: toKnots(localVelocity.x),
+      yawRateDegPerSecond: (-state.yawRateRadPerSecond * 180) / Math.PI,
+      lateralDriftKnots: -toKnots(localVelocity.x),
       surgeSpeedKnots: toKnots(localVelocity.z),
       worldX: state.worldPosition.x,
       worldZ: state.worldPosition.z,

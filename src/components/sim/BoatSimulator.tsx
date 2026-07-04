@@ -307,9 +307,10 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     const metersPerDegreeLon =
       111_320 * Math.cos((anchor.coordinate.lat * Math.PI) / 180);
 
+    // World +x is west, so eastward longitude change is -deltaX.
     setMapBoatCoordinate({
       lat: anchor.coordinate.lat + deltaZ / metersPerDegreeLat,
-      lon: anchor.coordinate.lon + deltaX / metersPerDegreeLon,
+      lon: anchor.coordinate.lon - deltaX / metersPerDegreeLon,
     });
   };
   const handleTelemetrySample = useCallback((nextTelemetry: DockingTelemetry) => {

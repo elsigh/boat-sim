@@ -29,16 +29,20 @@ export function computeBerthGuidance(
   const deltaZ = berth.center[1] - telemetry.worldZ;
   const rangeM = Math.hypot(deltaX, deltaZ);
 
+  // berth.headingDeg is a world-frame angle (layouts are mirrored into the
+  // world at load); telemetry.headingDeg is true compass. World +x renders as
+  // west, so the compass equivalent of a world angle is its negation.
   const headingRad = (berth.headingDeg * Math.PI) / 180;
   const forwardX = Math.sin(headingRad);
   const forwardZ = Math.cos(headingRad);
-  const rightX = Math.cos(headingRad);
-  const rightZ = -Math.sin(headingRad);
+  // Starboard of a world direction (sin h, cos h) is (-cos h, sin h).
+  const starboardX = -Math.cos(headingRad);
+  const starboardZ = Math.sin(headingRad);
 
   const alongM = deltaX * forwardX + deltaZ * forwardZ;
-  // Delta points boat->berth, so the boat sits on the opposite side of it.
-  const acrossM = -(deltaX * rightX + deltaZ * rightZ);
-  const headingErrorDeg = normalizeSignedDegrees(telemetry.headingDeg - berth.headingDeg);
+  // Boat offset from the berth is -delta; positive = boat starboard of line.
+  const acrossM = -(deltaX * starboardX + deltaZ * starboardZ);
+  const headingErrorDeg = normalizeSignedDegrees(telemetry.headingDeg + berth.headingDeg);
 
   const closureMetersPerSecond =
     rangeM > 0.05

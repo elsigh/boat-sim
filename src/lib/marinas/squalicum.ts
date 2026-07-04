@@ -151,12 +151,13 @@ export const SQUALICUM_HARBOR: MarinaLayout = {
     ...eastDock2.docks,
   ],
   pilings: [
+    // Pilings hug the float's SW face so the NE berth face stays clear.
     pilingsAlong({
       id: "visitor-pilings",
       center: VISITOR_FLOAT_CENTER,
       bearingDeg: FLOAT_BEARING,
       lengthM: 80,
-      offsetM: -2.6,
+      offsetM: 1.7,
       count: 6,
     }),
     pilingsAlong({

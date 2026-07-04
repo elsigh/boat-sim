@@ -115,17 +115,18 @@ export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsPr
       }
     };
 
+    // Local port is +x, starboard is -x.
     updateEngineWash(
       portGroupRef.current,
       portMaterialRef.current,
       engines.port.running ? engines.port.effectiveThrottle : 0,
-      -boat.engineLateralOffsetM,
+      boat.engineLateralOffsetM,
     );
     updateEngineWash(
       starboardGroupRef.current,
       starboardMaterialRef.current,
       engines.starboard.running ? engines.starboard.effectiveThrottle : 0,
-      boat.engineLateralOffsetM,
+      -boat.engineLateralOffsetM,
     );
 
     const bowMesh = bowMeshRef.current;
@@ -135,8 +136,9 @@ export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsPr
       const magnitude = Math.min(1, Math.abs(bowThruster));
       bowMaterial.uniforms.uStrength.value = magnitude * 0.9;
       bowMaterial.uniforms.uTime.value = time;
-      // Water discharges opposite the direction the bow is pushed.
-      const dischargeSide = bowThruster > 0 ? -1 : 1;
+      // Water discharges opposite the push: a starboard push (-x) expels to
+      // port (+x).
+      const dischargeSide = bowThruster > 0 ? 1 : -1;
       const reach = 1.6 + magnitude * 2.4;
       bowMesh.position.set(
         dischargeSide * (boat.beamM * 0.5 + reach * 0.4),

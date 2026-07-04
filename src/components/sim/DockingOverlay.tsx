@@ -535,8 +535,11 @@ function DockingPracticePanel({
     guidance !== null &&
     guidance.rangeM < 45 &&
     guidance.closureKnots > 1.2;
-  const windFromDeg = (marina.conditions.windTowardDeg + 180) % 360;
-  const windRelativeDeg = marina.conditions.windTowardDeg - telemetry.headingDeg;
+  // conditions store world-frame angles; compass equivalent is the negation.
+  const windTowardCompassDeg =
+    ((-marina.conditions.windTowardDeg % 360) + 360) % 360;
+  const windFromDeg = (windTowardCompassDeg + 180) % 360;
+  const windRelativeDeg = windTowardCompassDeg - telemetry.headingDeg;
 
   return (
     <div className="pointer-events-auto max-w-[23rem] rounded-2xl border border-white/12 bg-slate-950/74 px-4 py-3 shadow-2xl backdrop-blur-xl">
