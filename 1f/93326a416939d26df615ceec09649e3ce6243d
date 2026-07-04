@@ -1,0 +1,40 @@
+src/components/sim/Water.tsx
+  s_503510a5adb0be::t_b7258e91efb791 80
+  s_503510a5adb0be::t_ae3d4894d64563 5
+  s_503510a5adb0be::t_cf7018077cc471 101,105-111,115-116
+  s_503510a5adb0be::t_e767d512e26cca 87
+src/components/sim/Marina.tsx
+  s_503510a5adb0be::t_3226ff1d184a5f 331
+src/components/sim/BoatSimulator.tsx
+  s_503510a5adb0be::t_93039c32b0de9d 398,400
+  s_503510a5adb0be::t_ee3870ba140b8b 8
+  s_503510a5adb0be::t_08c5422586fa0a 324
+  s_503510a5adb0be::t_3ef3a1248ee6e5 65-88
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_47a927703ae1ef 370-440
+  s_503510a5adb0be::t_3f5a45def01ed7 26,32
+  s_503510a5adb0be::t_3b9229fac14be2 234-240
+  s_503510a5adb0be::t_45b3db7dd72cf5 479
+  s_503510a5adb0be::t_bfdd802922e4aa 124-132,134-135
+  s_503510a5adb0be::t_3995ee5522008d 83,86
+  s_503510a5adb0be::t_c353b2b9570b9e 212,224
+  s_503510a5adb0be::t_f672bfc87897a4 231-233
+.claude/skills/d3k/SKILL.md
+  s_503510a5adb0be::t_74351131e2c371 1-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1f93326a416939d26df615ceec09649e3ce6243d",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
