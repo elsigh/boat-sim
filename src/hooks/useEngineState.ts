@@ -59,10 +59,15 @@ const THROTTLE_NEUTRAL_DEADBAND = 0.045;
 const SAME_DIRECTION_MATCH_THRESHOLD = 0.14;
 const FORWARD_DIFFERENTIAL_RETENTION = 0.38;
 const REVERSE_DIFFERENTIAL_RETENTION = 0.2;
-const AHEAD_POWER_RATE_PER_SECOND = 0.24;
-const ASTERN_POWER_RATE_PER_SECOND = 0.18;
-const NEUTRAL_POWER_RATE_PER_SECOND = 0.42;
-const REVERSING_POWER_RATE_PER_SECOND = 0.28;
+// Engines answer the levers near-instantly — diesels rev in well under a
+// second, and the boat's sluggishness comes from hull mass and water drag in
+// the physics model, not from lagging the engine output. The slower
+// through-neutral rate is the one mechanical beat that remains: the gearbox
+// shifting between ahead and astern.
+const AHEAD_POWER_RATE_PER_SECOND = 3.2;
+const ASTERN_POWER_RATE_PER_SECOND = 3.2;
+const NEUTRAL_POWER_RATE_PER_SECOND = 4.5;
+const REVERSING_POWER_RATE_PER_SECOND = 2.4;
 const POWER_SETTLE_EPSILON = 0.002;
 
 function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeState {
