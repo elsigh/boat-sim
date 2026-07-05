@@ -1,0 +1,31 @@
+src/components/sim/BoatSimulator.tsx
+  s_503510a5adb0be::t_2c05917b8c849b 27
+  s_503510a5adb0be::t_2fb120afa0fd11 233-274
+  s_503510a5adb0be::t_fb881f5ee770c6 277-291
+  s_503510a5adb0be::t_6f14d72e052bb2 489
+  s_503510a5adb0be::t_9cf9c0639e3e25 488,490-492
+src/components/sim/DockingCelebration.tsx
+  s_503510a5adb0be::t_7e8d6c8d7b6a81 30-41
+  s_503510a5adb0be::t_a32c0a5097f508 152-153,155-165,174
+  s_503510a5adb0be::t_e37dce1ca8df46 334
+  s_503510a5adb0be::t_1b77630095a32d 131-132
+  s_503510a5adb0be::t_6ec920f0fca1a0 141
+  s_503510a5adb0be::t_19578d67e51d81 56,61,68,72-74,84
+  s_503510a5adb0be::t_e5b745ec7787b8 1-29,42-55,57-60,62-67,69-71,75-83,85-130,133-140,142-151,154,166-173,175-333,335-404
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d1f73274e8e6a2d96f79a766a485aaf7378a91ac",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
