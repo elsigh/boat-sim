@@ -351,13 +351,9 @@ function buildKeyboardSnapshot(
   bowThruster: number,
   active: boolean,
 ): GamepadSnapshot {
+  // Engine masters and ignition are deliberately NOT faked here: starting the
+  // engines is part of the ritual, via the start overlay or panel buttons.
   const rawButtons = new Array(8).fill(0);
-
-  if (active) {
-    rawButtons[2] = 1;
-    rawButtons[3] = 1;
-    rawButtons[7] = 1;
-  }
 
   return {
     connected: active,

@@ -6,7 +6,7 @@ import type { PointerEventHandler, WheelEventHandler } from "react";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
-import type { TwinEngineState } from "@/hooks/useEngineState";
+import type { EngineChannelState, TwinEngineState } from "@/hooks/useEngineState";
 import type { Berth, MarinaLayout, SpawnPoint } from "@/lib/marinas/types";
 import type { CruiseScenario } from "@/lib/scenarios/san-juan-aug-2026";
 import type { BerthGuidance } from "@/lib/sim/berth-guidance";
@@ -438,7 +438,97 @@ export function DockingOverlay({
         </div>
       </div>
       )}
+
+      {!enginesRunning ? (
+        <EngineStartOverlay
+          engineState={engineState}
+          marinaName={marina.name}
+          boatName={selectedBoat.displayName}
+          onStartEngines={onStartEngines}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function EngineStartOverlay({
+  boatName,
+  engineState,
+  marinaName,
+  onStartEngines,
+}: {
+  boatName: string;
+  engineState: TwinEngineState;
+  marinaName: string;
+  onStartEngines: () => void;
+}) {
+  const starting = engineState.port.starting || engineState.starboard.starting;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
+      <div className="pointer-events-auto w-[24rem] max-w-full rounded-3xl border border-white/14 bg-slate-950/85 px-6 py-6 text-center shadow-2xl backdrop-blur-xl">
+        <p className="text-[0.62rem] uppercase tracking-[0.3em] text-cyan-100/70">
+          {boatName}
+        </p>
+        <p className="mt-1 text-[0.68rem] text-slate-400">{marinaName}</p>
+
+        <h2
+          className={`mt-4 text-lg font-semibold tracking-wide text-white ${
+            starting ? "animate-pulse" : ""
+          }`}
+        >
+          {starting ? "Starting engines…" : "Engines are shut down"}
+        </h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-300">
+          {starting
+            ? "Give the Cats a moment to rumble to life."
+            : "Light off both diesels before you take the helm."}
+        </p>
+
+        <div className="mt-4 flex justify-center gap-2">
+          <EngineStatusChip label="Port" channel={engineState.port} />
+          <EngineStatusChip label="Stbd" channel={engineState.starboard} />
+        </div>
+
+        <button
+          type="button"
+          onPointerDown={stopPointerPropagation}
+          onClick={onStartEngines}
+          disabled={starting}
+          className="mt-5 w-full rounded-2xl border border-emerald-300/30 bg-emerald-400/15 px-4 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-emerald-100 transition hover:bg-emerald-400/22 disabled:cursor-wait disabled:opacity-60"
+        >
+          {starting ? "Starting…" : "Start engines"}
+        </button>
+
+        <p className="mt-4 text-[0.62rem] leading-relaxed text-slate-500">
+          Throttles W/S · I/K &nbsp;·&nbsp; Bow thruster A/D &nbsp;·&nbsp; Hide panels H
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EngineStatusChip({
+  channel,
+  label,
+}: {
+  channel: EngineChannelState;
+  label: string;
+}) {
+  const state = channel.running
+    ? { text: "Running", className: "border-emerald-300/30 bg-emerald-400/12 text-emerald-100" }
+    : channel.starting
+      ? { text: "Starting", className: "animate-pulse border-amber-300/30 bg-amber-400/12 text-amber-100" }
+      : channel.masterOn
+        ? { text: "Armed", className: "border-sky-300/25 bg-sky-300/10 text-sky-100" }
+        : { text: "Off", className: "border-white/10 bg-white/5 text-slate-400" };
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 font-mono text-[0.62rem] uppercase tracking-[0.16em] ${state.className}`}
+    >
+      {label} · {state.text}
+    </span>
   );
 }
 
