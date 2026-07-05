@@ -1,0 +1,23 @@
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_db439dcb4089ff 9
+  s_503510a5adb0be::t_6bfec2e771807e 441-506,511-533
+  s_503510a5adb0be::t_87088510c333b0 534
+src/hooks/useGamepad.ts
+  s_503510a5adb0be::t_6ed5c6076149a2 354-355
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b9015de7d6fcbd97195664474a7954a20a3f2e58",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
