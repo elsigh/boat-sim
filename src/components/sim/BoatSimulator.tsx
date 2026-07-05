@@ -24,6 +24,7 @@ import {
 import { useViewportCamera } from "@/hooks/useViewportCamera";
 
 import { Boat } from "./Boat";
+import { DockingCelebration } from "./DockingCelebration";
 import { DockingOverlay } from "./DockingOverlay";
 import { Marina } from "./Marina";
 import { SimCameraRig } from "./SimCameraRig";
@@ -229,8 +230,65 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     [selectedBerth, telemetry],
   );
 
+  // Docking celebration: armed only after the boat has genuinely been away
+  // from the berth, so spawning already-docked never fires it.
+  const [celebration, setCelebration] = useState({ id: 0, active: false });
+  const celebrationArmedRef = useRef(false);
+  const dockTimerRef = useRef<number | null>(null);
+  const awayTimerRef = useRef<number | null>(null);
+  const dockedNow = Boolean(guidance?.docked);
+
+  useEffect(() => {
+    if (dockedNow) {
+      if (awayTimerRef.current) {
+        window.clearTimeout(awayTimerRef.current);
+        awayTimerRef.current = null;
+      }
+
+      if (celebrationArmedRef.current && !dockTimerRef.current) {
+        dockTimerRef.current = window.setTimeout(() => {
+          dockTimerRef.current = null;
+          celebrationArmedRef.current = false;
+          setCelebration((current) => ({ id: current.id + 1, active: true }));
+        }, 700);
+      }
+
+      return;
+    }
+
+    if (dockTimerRef.current) {
+      window.clearTimeout(dockTimerRef.current);
+      dockTimerRef.current = null;
+    }
+
+    if (!awayTimerRef.current) {
+      awayTimerRef.current = window.setTimeout(() => {
+        awayTimerRef.current = null;
+        celebrationArmedRef.current = true;
+        setCelebration((current) =>
+          current.active ? { ...current, active: false } : current,
+        );
+      }, 3000);
+    }
+  }, [dockedNow]);
+
   const resetBoatTo = useCallback(
     (spawn: SpawnPoint, anchorCoordinate: { lat: number; lon: number }) => {
+      celebrationArmedRef.current = false;
+      setCelebration((current) =>
+        current.active ? { ...current, active: false } : current,
+      );
+
+      if (dockTimerRef.current) {
+        window.clearTimeout(dockTimerRef.current);
+        dockTimerRef.current = null;
+      }
+
+      if (awayTimerRef.current) {
+        window.clearTimeout(awayTimerRef.current);
+        awayTimerRef.current = null;
+      }
+
       resetIdRef.current += 1;
       mapAnchorRef.current = {
         coordinate: anchorCoordinate,
@@ -427,6 +485,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
 
         <Water />
         <Wayline points={waylinePoints} />
+        <DockingCelebration
+          active={celebration.active}
+          celebrationId={celebration.id}
+          berth={selectedBerth}
+        />
         <SimCameraRig
           boatLengthM={selectedBoat.lengthM}
           bodyRef={boatBodyRef}
