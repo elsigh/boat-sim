@@ -1,0 +1,23 @@
+src/hooks/useEngineAudio.ts
+  s_503510a5adb0be::t_859e5de0ba9727 11-23
+  s_503510a5adb0be::t_b6a9fabf177e13 76-103,112-179,192-194,196-197,203-211,223-225,227,229-233,235-236,238-251
+  s_503510a5adb0be::t_ae5cb9bc388fa2 326-329
+  s_503510a5adb0be::t_bbb3323df2e1e2 361-365,367-370
+  s_503510a5adb0be::t_0779dccaca817e 64,66,68-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cc3c7a2e79db7fb0554c8ae584645cf748b7db85",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
