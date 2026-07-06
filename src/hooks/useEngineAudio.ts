@@ -6,14 +6,21 @@ import type { TwinEngineState } from "@/hooks/useEngineState";
 
 type EngineVoice = {
   outputGain: GainNode;
-  lowGain: GainNode;
-  highGain: GainNode;
   starterGain: GainNode;
-  noiseGain: GainNode;
-  lowOsc: OscillatorNode;
-  highOsc: OscillatorNode;
   starterOsc: OscillatorNode;
-  noiseSource: AudioBufferSourceNode;
+  /** Combustion rumble: noise + low fundamental, gated by the firing pulses. */
+  combustionGain: GainNode;
+  combustionFilter: BiquadFilterNode;
+  fundOsc: OscillatorNode;
+  fundGain: GainNode;
+  /** Exhaust burble band, ungated. */
+  exhaustGain: GainNode;
+  /** Pulse train at cylinder-firing rate that chops the combustion bus. */
+  pulseOsc: OscillatorNode;
+  wobbleOsc: OscillatorNode;
+  noiseSources: AudioBufferSourceNode[];
+  /** Per-engine firing-rate offset so the twins drift in and out of sync. */
+  firingOffsetHz: number;
 };
 
 type EngineAudioRig = {
@@ -54,15 +61,46 @@ function setTarget(param: AudioParam, value: number, time: number, slew = 0.08) 
 function createNoiseBuffer(context: AudioContext) {
   const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
   const channel = buffer.getChannelData(0);
+  let last = 0;
 
+  // Brown-ish noise: integrate white noise for a deep, rumbly spectrum.
   for (let index = 0; index < channel.length; index += 1) {
-    channel[index] = (Math.random() * 2 - 1) * 0.45;
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.02 * white) / 1.02;
+    channel[index] = last * 3.2;
   }
 
   return buffer;
 }
 
-function createEngineVoice(context: AudioContext, pan: number, noiseBuffer: AudioBuffer): EngineVoice {
+// The chug: everything combustion-flavored passes through a gain node whose
+// gain is chopped at cylinder-firing rate by a shaped pulse train. At idle the
+// firing rate sits low enough (~11 Hz) that individual pulses read as
+// "putt putt putt"; opening the throttle raises the rate, the filter
+// brightness, and the exhaust burble together.
+const IDLE_FIRING_HZ = 11;
+const FULL_FIRING_HZ = 34;
+
+function createPulseCurve() {
+  const samples = 1024;
+  const curve = new Float32Array(samples);
+
+  for (let index = 0; index < samples; index += 1) {
+    const x = index / (samples - 1);
+    // Narrow positive lobes with a soft floor between firings.
+    curve[index] = 0.22 + 0.78 * Math.pow(x, 5);
+  }
+
+  return curve;
+}
+
+function createEngineVoice(
+  context: AudioContext,
+  pan: number,
+  noiseBuffer: AudioBuffer,
+  firingOffsetHz: number,
+  wobbleRateHz: number,
+): EngineVoice {
   const panner = context.createStereoPanner();
   panner.pan.value = pan;
 
@@ -71,31 +109,74 @@ function createEngineVoice(context: AudioContext, pan: number, noiseBuffer: Audi
   outputGain.connect(panner);
   panner.connect(context.destination);
 
-  const lowOsc = context.createOscillator();
-  lowOsc.type = "triangle";
-  lowOsc.frequency.value = 26;
-  const lowGain = context.createGain();
-  lowGain.gain.value = 0.0001;
-  const lowFilter = context.createBiquadFilter();
-  lowFilter.type = "lowpass";
-  lowFilter.frequency.value = 180;
-  lowOsc.connect(lowGain);
-  lowGain.connect(lowFilter);
-  lowFilter.connect(outputGain);
+  // Combustion bus, gated by the firing pulse train.
+  const chugGain = context.createGain();
+  chugGain.gain.value = 0.0001;
+  chugGain.connect(outputGain);
 
-  const highOsc = context.createOscillator();
-  highOsc.type = "sawtooth";
-  highOsc.frequency.value = 52;
-  const highGain = context.createGain();
-  highGain.gain.value = 0.0001;
-  const highFilter = context.createBiquadFilter();
-  highFilter.type = "bandpass";
-  highFilter.frequency.value = 135;
-  highFilter.Q.value = 0.8;
-  highOsc.connect(highGain);
-  highGain.connect(highFilter);
-  highFilter.connect(outputGain);
+  const pulseOsc = context.createOscillator();
+  pulseOsc.type = "sine";
+  pulseOsc.frequency.value = IDLE_FIRING_HZ + firingOffsetHz;
+  const pulseShaper = context.createWaveShaper();
+  pulseShaper.curve = createPulseCurve();
+  const pulseDepth = context.createGain();
+  pulseDepth.gain.value = 1;
+  pulseOsc.connect(pulseShaper);
+  pulseShaper.connect(pulseDepth);
+  pulseDepth.connect(chugGain.gain);
 
+  // Slow RPM wobble so the beat never sits perfectly steady.
+  const wobbleOsc = context.createOscillator();
+  wobbleOsc.type = "sine";
+  wobbleOsc.frequency.value = wobbleRateHz;
+  const wobbleDepth = context.createGain();
+  wobbleDepth.gain.value = 0.35;
+  wobbleOsc.connect(wobbleDepth);
+  wobbleDepth.connect(pulseOsc.frequency);
+
+  // Combustion rumble: brown-ish noise through a low lowpass.
+  const combustionSource = context.createBufferSource();
+  combustionSource.buffer = noiseBuffer;
+  combustionSource.loop = true;
+  const combustionFilter = context.createBiquadFilter();
+  combustionFilter.type = "lowpass";
+  combustionFilter.frequency.value = 140;
+  combustionFilter.Q.value = 0.4;
+  const combustionGain = context.createGain();
+  combustionGain.gain.value = 0.0001;
+  combustionSource.connect(combustionFilter);
+  combustionFilter.connect(combustionGain);
+  combustionGain.connect(chugGain);
+
+  // Low fundamental for body under the noise.
+  const fundOsc = context.createOscillator();
+  fundOsc.type = "triangle";
+  fundOsc.frequency.value = (IDLE_FIRING_HZ + firingOffsetHz) * 2;
+  const fundFilter = context.createBiquadFilter();
+  fundFilter.type = "lowpass";
+  fundFilter.frequency.value = 170;
+  const fundGain = context.createGain();
+  fundGain.gain.value = 0.0001;
+  fundOsc.connect(fundFilter);
+  fundFilter.connect(fundGain);
+  fundGain.connect(chugGain);
+
+  // Exhaust burble: a higher noise band, not gated, wet and steady.
+  const exhaustSource = context.createBufferSource();
+  exhaustSource.buffer = noiseBuffer;
+  exhaustSource.loop = true;
+  exhaustSource.playbackRate.value = 0.62;
+  const exhaustFilter = context.createBiquadFilter();
+  exhaustFilter.type = "bandpass";
+  exhaustFilter.frequency.value = 330;
+  exhaustFilter.Q.value = 0.5;
+  const exhaustGain = context.createGain();
+  exhaustGain.gain.value = 0.0001;
+  exhaustSource.connect(exhaustFilter);
+  exhaustFilter.connect(exhaustGain);
+  exhaustGain.connect(outputGain);
+
+  // Starter motor whirr.
   const starterOsc = context.createOscillator();
   starterOsc.type = "square";
   starterOsc.frequency.value = 16;
@@ -108,34 +189,26 @@ function createEngineVoice(context: AudioContext, pan: number, noiseBuffer: Audi
   starterGain.connect(starterFilter);
   starterFilter.connect(outputGain);
 
-  const noiseSource = context.createBufferSource();
-  noiseSource.buffer = noiseBuffer;
-  noiseSource.loop = true;
-  const noiseGain = context.createGain();
-  noiseGain.gain.value = 0.0001;
-  const noiseFilter = context.createBiquadFilter();
-  noiseFilter.type = "bandpass";
-  noiseFilter.frequency.value = 95;
-  noiseFilter.Q.value = 0.6;
-  noiseSource.connect(noiseGain);
-  noiseGain.connect(noiseFilter);
-  noiseFilter.connect(outputGain);
-
-  lowOsc.start();
-  highOsc.start();
+  pulseOsc.start();
+  wobbleOsc.start();
+  fundOsc.start();
   starterOsc.start();
-  noiseSource.start();
+  combustionSource.start();
+  exhaustSource.start(context.currentTime, Math.random() * 1.5);
 
   return {
     outputGain,
-    lowGain,
-    highGain,
     starterGain,
-    noiseGain,
-    lowOsc,
-    highOsc,
     starterOsc,
-    noiseSource,
+    combustionGain,
+    combustionFilter,
+    fundOsc,
+    fundGain,
+    exhaustGain,
+    pulseOsc,
+    wobbleOsc,
+    noiseSources: [combustionSource, exhaustSource],
+    firingOffsetHz,
   };
 }
 
@@ -147,21 +220,36 @@ function updateVoice(
   const time = context.currentTime;
   const demand = Math.abs(engine.effectiveThrottle);
   const engaged = engine.starting || engine.running;
+  const firingHz = engine.running
+    ? IDLE_FIRING_HZ + voice.firingOffsetHz + demand * (FULL_FIRING_HZ - IDLE_FIRING_HZ)
+    : 7;
 
-  setTarget(voice.outputGain.gain, engaged ? 0.32 : 0.0001, time, 0.12);
+  setTarget(voice.outputGain.gain, engaged ? 0.5 : 0.0001, time, 0.12);
   setTarget(voice.starterGain.gain, engine.starting ? 0.11 : 0.0001, time, 0.04);
-  setTarget(voice.lowGain.gain, engine.running ? 0.18 + demand * 0.08 : 0.0001, time, 0.1);
-  setTarget(voice.highGain.gain, engine.running ? 0.03 + demand * 0.09 : 0.0001, time, 0.08);
-  setTarget(
-    voice.noiseGain.gain,
-    engine.starting ? 0.035 : engine.running ? 0.02 + demand * 0.04 : 0.0001,
-    time,
-    0.08,
-  );
-
-  setTarget(voice.lowOsc.frequency, engine.running ? 24 + demand * 18 : 18, time, 0.1);
-  setTarget(voice.highOsc.frequency, engine.running ? 50 + demand * 42 : 34, time, 0.1);
   setTarget(voice.starterOsc.frequency, engine.starting ? 14 + demand * 4 : 10, time, 0.06);
+
+  setTarget(voice.pulseOsc.frequency, firingHz, time, 0.09);
+  setTarget(voice.fundOsc.frequency, firingHz * 2, time, 0.09);
+
+  setTarget(
+    voice.combustionGain.gain,
+    engine.running ? 0.34 + demand * 0.3 : 0.0001,
+    time,
+    0.09,
+  );
+  setTarget(
+    voice.combustionFilter.frequency,
+    engine.running ? 130 + demand * 240 : 90,
+    time,
+    0.1,
+  );
+  setTarget(voice.fundGain.gain, engine.running ? 0.22 + demand * 0.14 : 0.0001, time, 0.09);
+  setTarget(
+    voice.exhaustGain.gain,
+    engine.starting ? 0.02 : engine.running ? 0.025 + demand * 0.075 : 0.0001,
+    time,
+    0.09,
+  );
 }
 
 function syncRigVoices(
@@ -235,8 +323,10 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
     const noiseBuffer = createNoiseBuffer(context);
     const rig: EngineAudioRig = {
       context,
-      port: createEngineVoice(context, -0.35, noiseBuffer),
-      starboard: createEngineVoice(context, 0.35, noiseBuffer),
+      // Slightly different firing rates and wobble so the twins drift in and
+      // out of sync — the classic two-diesel beat.
+      port: createEngineVoice(context, -0.35, noiseBuffer, 0, 0.23),
+      starboard: createEngineVoice(context, 0.35, noiseBuffer, 0.55, 0.31),
     };
 
     rigRef.current = rig;
@@ -268,15 +358,16 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
       window.removeEventListener("touchstart", unlock);
       context.removeEventListener("statechange", handleStateChange);
 
-      rig.port.lowOsc.stop();
-      rig.port.highOsc.stop();
-      rig.port.starterOsc.stop();
-      rig.port.noiseSource.stop();
+      for (const voice of [rig.port, rig.starboard]) {
+        voice.pulseOsc.stop();
+        voice.wobbleOsc.stop();
+        voice.fundOsc.stop();
+        voice.starterOsc.stop();
 
-      rig.starboard.lowOsc.stop();
-      rig.starboard.highOsc.stop();
-      rig.starboard.starterOsc.stop();
-      rig.starboard.noiseSource.stop();
+        for (const source of voice.noiseSources) {
+          source.stop();
+        }
+      }
 
       void context.close();
       rigRef.current = null;
