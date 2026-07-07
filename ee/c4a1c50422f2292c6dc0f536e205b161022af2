@@ -1,0 +1,22 @@
+src/components/sim/DockingOverlay.tsx
+  s_503510a5adb0be::t_dd3c42c6f26e0d 926-933,935-941,943,945-946,950-951,953-956,958-1031,1034-1119
+  s_503510a5adb0be::t_d115d08de95158 1127-1128,1130,1135-1136,1138,1140,1149-1155,1160-1169,1171
+  s_503510a5adb0be::t_27b2da806d7edb 334-335,337,343-344,346,350-358,361-365
+  s_503510a5adb0be::t_5c207f117829b5 366
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "eec4a1c50422f2292c6dc0f536e205b161022af2",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
