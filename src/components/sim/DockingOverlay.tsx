@@ -331,108 +331,38 @@ export function DockingOverlay({
                 label="Port"
                 value={engineState.port.effectiveThrottle}
                 demandValue={engineState.port.demandThrottle}
-                active={engineState.port.running}
+                masterOn={engineState.port.masterOn}
+                running={engineState.port.running}
                 starting={engineState.port.starting}
+                onToggleMaster={onTogglePortEngine}
               />
               <EngineLever
                 label="Stbd"
                 value={engineState.starboard.effectiveThrottle}
                 demandValue={engineState.starboard.demandThrottle}
-                active={engineState.starboard.running}
+                masterOn={engineState.starboard.masterOn}
+                running={engineState.starboard.running}
                 starting={engineState.starboard.starting}
+                onToggleMaster={onToggleStarboardEngine}
               />
             </div>
 
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              <MappedButton
-                label="Port Eng"
-                value={engineState.port.masterOn ? 1 : 0}
-                accent="bg-emerald-400/15 text-emerald-100"
-                activeLabel="On"
-                idleLabel="Off"
-                onClick={onTogglePortEngine}
-              />
-              <MappedButton
-                label="Stbd Eng"
-                value={engineState.starboard.masterOn ? 1 : 0}
-                accent="bg-emerald-400/15 text-emerald-100"
-                activeLabel="On"
-                idleLabel="Off"
-                onClick={onToggleStarboardEngine}
-              />
-              <MappedButton
-                label="Port Thr"
-                value={controls.rawButtons[4] ?? 0}
-                accent="bg-sky-400/15 text-sky-100"
-              />
-              <MappedButton
-                label="Stbd Thr"
-                value={controls.rawButtons[5] ?? 0}
-                accent="bg-sky-400/15 text-sky-100"
-              />
-              <MappedButton
-                label="Start"
-                value={engineState.ignitionPressed || enginesStarting ? 1 : 0}
-                accent="bg-amber-400/15 text-amber-100"
-                activeLabel={enginesStarting ? "Start" : "Push"}
-                idleLabel="Push"
-                onClick={onStartEngines}
-              />
-            </div>
-
-            <ControllerStatus controls={controls} />
-
-            <button
-              type="button"
-              suppressHydrationWarning
-              onPointerDown={stopPointerPropagation}
-              onClick={onToggleLeverSwap}
-              className={`mt-1.5 w-full rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
-                leversSwapped
-                  ? "border-amber-300/25 bg-amber-300/10 text-amber-100"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
-              }`}
-            >
-              Swap levers · {leversSwapped ? "on" : "off"}
-              <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
-                Use if your port lever drives the starboard engine
-              </span>
-            </button>
-
-            <div className="mt-1.5 flex items-stretch gap-1.5">
-              <button
-                type="button"
-                suppressHydrationWarning
-                onPointerDown={stopPointerPropagation}
-                onClick={onCalibrateQuadrantIdle}
-                disabled={!hardwareHelmConnected}
-                className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
-                  !hardwareHelmConnected
-                    ? "cursor-not-allowed border-white/6 bg-white/5 text-slate-600"
-                    : quadrantIdleCalibrated
-                      ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
-                      : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
-                }`}
-              >
-                {quadrantIdleCalibrated ? "Idle calibrated ✓" : "Set lever idle"}
-                <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
-                  Put both levers at their idle detent, then click
-                </span>
-              </button>
-              {quadrantIdleCalibrated ? (
-                <button
-                  type="button"
-                  suppressHydrationWarning
-                  onPointerDown={stopPointerPropagation}
-                  onClick={onClearQuadrantIdle}
-                  aria-label="Clear lever idle calibration"
-                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 text-[0.6rem] uppercase text-slate-400 transition hover:bg-white/10"
-                >
-                  ×
-                </button>
-              ) : null}
-            </div>
+            <ControllerSetup
+              controls={controls}
+              hardwareHelmConnected={hardwareHelmConnected}
+              leversSwapped={leversSwapped}
+              onCalibrateQuadrantIdle={onCalibrateQuadrantIdle}
+              onClearQuadrantIdle={onClearQuadrantIdle}
+              onToggleLeverSwap={onToggleLeverSwap}
+              quadrantIdleCalibrated={quadrantIdleCalibrated}
+            />
           </div>
+
+          <EnvironmentPanel
+            conditionsMode={conditionsMode}
+            marina={marina}
+            telemetry={telemetry}
+          />
 
           <HelmInfoPanel telemetry={telemetry} />
         </div>
@@ -993,57 +923,200 @@ function ViewModeButton({
   );
 }
 
-function MappedButton({
-  label,
-  value,
-  accent,
-  activeLabel = "Active",
-  idleLabel = "Idle",
-  onClick,
+function ControllerSetup({
+  controls,
+  hardwareHelmConnected,
+  leversSwapped,
+  onCalibrateQuadrantIdle,
+  onClearQuadrantIdle,
+  onToggleLeverSwap,
+  quadrantIdleCalibrated,
 }: {
-  label: string;
-  value: number;
-  accent: string;
-  activeLabel?: string;
-  idleLabel?: string;
-  onClick?: () => void;
+  controls: GamepadSnapshot;
+  hardwareHelmConnected: boolean;
+  leversSwapped: boolean;
+  onCalibrateQuadrantIdle: () => void;
+  onClearQuadrantIdle: () => void;
+  onToggleLeverSwap: () => void;
+  quadrantIdleCalibrated: boolean;
 }) {
-  const active = value > 0.5;
-  const className = `min-w-0 rounded-lg bg-white/5 px-2 py-1 text-left ${
-    onClick ? "transition hover:bg-white/10 focus:outline-none focus:ring-1 focus:ring-white/20" : ""
-  }`;
-  const content = (
-    <>
-      <div className="truncate text-[0.5rem] uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </div>
-      <div className="mt-0.5 flex items-center gap-1">
-        <span
-          className={`rounded-full px-1.5 py-0.5 text-[0.5rem] uppercase tracking-[0.12em] ${
-            active ? accent : "bg-white/8 text-slate-400"
-          }`}
-        >
-          {active ? activeLabel : idleLabel}
-        </span>
-      </div>
-    </>
-  );
+  const [open, setOpen] = useState(false);
 
-  if (onClick) {
-    return (
+  return (
+    <div className="mt-2">
       <button
         type="button"
         onPointerDown={stopPointerPropagation}
-        onClick={onClick}
-        className={className}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between rounded-lg bg-white/5 px-2 py-1.5 text-[0.58rem] uppercase tracking-[0.16em] text-slate-400 transition hover:bg-white/8"
       >
-        {content}
+        <span>Controller setup {open ? "−" : "+"}</span>
+        <span className={hardwareHelmConnected ? "text-emerald-200" : "text-slate-500"}>
+          {hardwareHelmConnected ? "HW" : "Keys"}
+        </span>
       </button>
-    );
-  }
+
+      {open ? (
+        <div className="mt-1.5 space-y-1.5">
+          <ControllerStatus controls={controls} />
+
+          <button
+            type="button"
+            suppressHydrationWarning
+            onPointerDown={stopPointerPropagation}
+            onClick={onToggleLeverSwap}
+            className={`w-full rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
+              leversSwapped
+                ? "border-amber-300/25 bg-amber-300/10 text-amber-100"
+                : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+            }`}
+          >
+            Swap levers · {leversSwapped ? "on" : "off"}
+            <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
+              Use if your port lever drives the starboard engine
+            </span>
+          </button>
+
+          <div className="flex items-stretch gap-1.5">
+            <button
+              type="button"
+              suppressHydrationWarning
+              onPointerDown={stopPointerPropagation}
+              onClick={onCalibrateQuadrantIdle}
+              disabled={!hardwareHelmConnected}
+              className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left text-[0.58rem] uppercase tracking-[0.16em] transition ${
+                !hardwareHelmConnected
+                  ? "cursor-not-allowed border-white/6 bg-white/5 text-slate-600"
+                  : quadrantIdleCalibrated
+                    ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                    : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              {quadrantIdleCalibrated ? "Idle calibrated ✓" : "Set lever idle"}
+              <span className="mt-0.5 block text-[0.52rem] normal-case tracking-normal text-slate-500">
+                Put both levers at their idle detent, then click
+              </span>
+            </button>
+            {quadrantIdleCalibrated ? (
+              <button
+                type="button"
+                suppressHydrationWarning
+                onPointerDown={stopPointerPropagation}
+                onClick={onClearQuadrantIdle}
+                aria-label="Clear lever idle calibration"
+                className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 text-[0.6rem] uppercase text-slate-400 transition hover:bg-white/10"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EnvironmentPanel({
+  conditionsMode,
+  marina,
+  telemetry,
+}: {
+  conditionsMode: "typical" | "calm";
+  marina: MarinaLayout;
+  telemetry: DockingTelemetry;
+}) {
+  const calm = conditionsMode === "calm";
+  // conditions store world-frame angles; compass equivalent is the negation.
+  const windTowardDeg = ((-marina.conditions.windTowardDeg % 360) + 360) % 360;
+  const currentTowardDeg = ((-marina.conditions.currentTowardDeg % 360) + 360) % 360;
 
   return (
-    <div className={className}>{content}</div>
+    <div className="rounded-2xl border border-white/12 bg-slate-950/74 px-3 py-2 shadow-2xl backdrop-blur-xl">
+      <p className="text-[0.65rem] uppercase tracking-[0.3em] text-teal-100/70">
+        Environment
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <EnvironmentDial
+          label="Wind"
+          knots={calm ? 0 : marina.conditions.windKnots}
+          towardDeg={windTowardDeg}
+          headingDeg={telemetry.headingDeg}
+        />
+        <EnvironmentDial
+          label="Current"
+          knots={calm ? 0 : marina.conditions.currentKnots}
+          towardDeg={currentTowardDeg}
+          headingDeg={telemetry.headingDeg}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EnvironmentDial({
+  label,
+  knots,
+  towardDeg,
+  headingDeg,
+}: {
+  label: string;
+  knots: number;
+  towardDeg: number;
+  headingDeg: number;
+}) {
+  const active = knots > 0.05;
+  const fromDeg = (towardDeg + 180) % 360;
+
+  return (
+    <div
+      className="flex flex-col items-center rounded-xl bg-white/5 px-2 py-2"
+      title={active ? `${label} ${knots.toFixed(1)} kn from ${Math.round(fromDeg)
+        .toString()
+        .padStart(3, "0")}T` : `No ${label.toLowerCase()}`}
+    >
+      <div className="relative h-14 w-14 rounded-full border border-white/12 bg-slate-900/80">
+        <span className="absolute left-1/2 top-0.5 -translate-x-1/2 font-mono text-[0.5rem] text-slate-500">
+          N
+        </span>
+        {/* boat heading tick on the bezel */}
+        <div
+          className="absolute left-1/2 top-1/2 h-full w-0.5 origin-center"
+          style={{ transform: `translate(-50%, -50%) rotate(${headingDeg}deg)` }}
+        >
+          <div className="absolute left-1/2 top-0 h-1.5 w-0.5 -translate-x-1/2 rounded-full bg-sky-300/80" />
+        </div>
+        {/* flow arrow points the way it pushes the boat */}
+        {active ? (
+          <div
+            className="absolute left-1/2 top-1/2 h-full w-3 origin-center"
+            style={{ transform: `translate(-50%, -50%) rotate(${towardDeg}deg)` }}
+          >
+            <svg
+              viewBox="0 0 12 40"
+              className="absolute left-1/2 top-1/2 h-[68%] w-2.5 -translate-x-1/2 -translate-y-1/2 text-teal-200"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 36V6" />
+              <path d="m1.5 11 4.5-5 4.5 5" />
+            </svg>
+          </div>
+        ) : (
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[0.6rem] text-slate-600">
+            —
+          </span>
+        )}
+      </div>
+      <span className="mt-1 text-[0.52rem] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </span>
+      <span className="font-mono text-[0.66rem] text-slate-200">
+        {knots.toFixed(1)} kn
+      </span>
+    </div>
   );
 }
 
@@ -1051,15 +1124,20 @@ function EngineLever({
   label,
   value,
   demandValue,
-  active,
+  masterOn,
+  running,
   starting,
+  onToggleMaster,
 }: {
   label: string;
   value: number;
   demandValue: number;
-  active: boolean;
+  masterOn: boolean;
+  running: boolean;
   starting: boolean;
+  onToggleMaster: () => void;
 }) {
+  const active = running;
   const command = Math.max(-1, Math.min(1, demandValue));
   const clamped = Math.max(-1, Math.min(1, active ? value : command));
   const magnitude = `${Math.abs(clamped) * 50}%`;
@@ -1068,13 +1146,29 @@ function EngineLever({
   const commandIsForward = command >= 0;
   const showCommandOverlay = active && Math.abs(command - clamped) > 0.025;
   const hasCommand = Math.abs(command) > 0.025;
+  const statusDotClass = running
+    ? "bg-emerald-300"
+    : starting
+      ? "animate-pulse bg-amber-300"
+      : masterOn
+        ? "bg-sky-300"
+        : "bg-slate-600";
 
   return (
     <div className="rounded-xl bg-white/5 px-2.5 py-1.5">
       <div className="mb-1 flex items-center justify-between text-[0.62rem] uppercase tracking-[0.18em] text-slate-400">
-        <span>{label}</span>
+        <button
+          type="button"
+          onPointerDown={stopPointerPropagation}
+          onClick={onToggleMaster}
+          title={masterOn ? "Shut down engine" : "Engine master on"}
+          className="flex items-center gap-1.5 rounded-md px-1 py-0.5 transition hover:bg-white/10"
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${statusDotClass}`} />
+          <span>{label}</span>
+        </button>
         <span className="font-mono text-slate-200">
-          {starting ? "START" : active ? formatSigned(clamped, 2) : "OFF"}
+          {starting ? "START" : running ? formatSigned(clamped, 2) : masterOn ? "ARMED" : "OFF"}
         </span>
       </div>
       <div className="flex items-center justify-between text-[0.58rem] uppercase tracking-[0.16em] text-slate-500">
