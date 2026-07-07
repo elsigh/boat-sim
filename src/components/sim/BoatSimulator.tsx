@@ -23,6 +23,7 @@ import {
 } from "@/lib/sim/boat-physics";
 import { useViewportCamera } from "@/hooks/useViewportCamera";
 
+import { BerthBearingLine } from "./BerthBearingLine";
 import { Boat } from "./Boat";
 import { DockingCelebration } from "./DockingCelebration";
 import { DockingOverlay } from "./DockingOverlay";
@@ -485,6 +486,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
 
         <Water />
         <Wayline points={waylinePoints} />
+        <BerthBearingLine bodyRef={boatBodyRef} berth={selectedBerth} />
         <DockingCelebration
           active={celebration.active}
           celebrationId={celebration.id}
