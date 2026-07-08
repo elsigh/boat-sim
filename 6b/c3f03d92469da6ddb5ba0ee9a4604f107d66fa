@@ -1,0 +1,23 @@
+docs/MAC_APP_STORE.md
+  s_503510a5adb0be::t_ceaa236cb0fe8e 18-55
+package.json
+  s_503510a5adb0be::t_9aabfe332b745f 34-39
+electron/entitlements/dev-id.plist
+  s_503510a5adb0be::t_cff1394720399f 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6bc3f03d92469da6ddb5ba0ee9a4604f107d66fa",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
