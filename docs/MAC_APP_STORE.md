@@ -22,7 +22,7 @@ Open the first time). Distribution to anyone else requires signing.
    - **Apple Distribution** certificate (a.k.a. "3rd Party Mac Developer Application")
    - **Mac Installer Distribution** certificate
 3. In App Store Connect, create the app record. Bundle ID must match
-   `com.elsigh.bonumvitae` (set in `package.json` → `build.appId`; change it
+   `com.elsigh.boatsim` (set in `package.json` → `build.appId`; change it
    there if you register something else).
 4. Create a **Mac App Store provisioning profile** for that bundle ID and
    save it as `electron/resources/embedded.provisionprofile`.

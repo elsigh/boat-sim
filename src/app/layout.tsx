@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Yacht Docking Simulator",
+  title: "boatsim",
   description: "A Next.js + React Three Fiber docking simulator with boat profiles and maneuvering practice scenes.",
 };
 

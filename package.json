@@ -14,8 +14,8 @@
     "app:mas": "npm run export && electron-builder --mac mas"
   },
   "build": {
-    "appId": "com.elsigh.bonumvitae",
-    "productName": "Bonum Vitae Docking Simulator",
+    "appId": "com.elsigh.boatsim",
+    "productName": "boatsim",
     "directories": {
       "output": "dist-app",
       "buildResources": "electron/resources"
@@ -39,7 +39,7 @@
       "hardenedRuntime": false
     },
     "dmg": {
-      "title": "Bonum Vitae"
+      "title": "boatsim"
     }
   },
   "dependencies": {

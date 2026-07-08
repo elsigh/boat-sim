@@ -11,7 +11,7 @@ function createWindow() {
     height: 945,
     minWidth: 1100,
     minHeight: 700,
-    title: "Bonum Vitae — Docking Simulator",
+    title: "boatsim",
     backgroundColor: "#07131c",
     webPreferences: {
       contextIsolation: true,
