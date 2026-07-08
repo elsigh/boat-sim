@@ -1,13 +1,11 @@
-import { BoatSimulator } from "@/components/sim/BoatSimulator";
+import { Suspense } from "react";
 
-type HomePageProps = {
-  searchParams: Promise<{
-    boat?: string;
-  }>;
-};
+import { BoatSimulatorRoute } from "@/components/sim/BoatSimulatorRoute";
 
-export default async function Home({ searchParams }: HomePageProps) {
-  const params = await searchParams;
-
-  return <BoatSimulator initialBoatSlug={params.boat} />;
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <BoatSimulatorRoute />
+    </Suspense>
+  );
 }

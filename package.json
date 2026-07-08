@@ -2,11 +2,45 @@
   "name": "boat-sim",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.mjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "export": "NEXT_OUTPUT=export next build",
+    "app:dev": "npm run export && electron .",
+    "app:build": "npm run export && electron-builder --mac dmg zip",
+    "app:mas": "npm run export && electron-builder --mac mas"
+  },
+  "build": {
+    "appId": "com.elsigh.bonumvitae",
+    "productName": "Bonum Vitae Docking Simulator",
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "electron/resources"
+    },
+    "files": [
+      "electron/**/*",
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.simulation-games",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "darkModeSupport": true
+    },
+    "mas": {
+      "entitlements": "electron/entitlements/mas.plist",
+      "entitlementsInherit": "electron/entitlements/mas-inherit.plist",
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "Bonum Vitae"
+    }
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -22,6 +56,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "electron-serve": "^2.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
