@@ -31,7 +31,12 @@
         "dmg",
         "zip"
       ],
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements/dev-id.plist",
+      "entitlementsInherit": "electron/entitlements/dev-id.plist",
+      "notarize": true
     },
     "mas": {
       "entitlements": "electron/entitlements/mas.plist",

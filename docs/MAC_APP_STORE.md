@@ -15,6 +15,44 @@ npm run app:build    # build .dmg and .zip into dist-app/
 `app:build` produces an unsigned app: fine for your own Mac (right-click →
 Open the first time). Distribution to anyone else requires signing.
 
+## Sharing a DMG with friends (Developer ID — no App Store)
+
+This is the easy distribution path: one certificate, no review, no
+sandbox. Friends double-click the DMG and it just opens.
+
+1. **Enroll** in the Apple Developer Program ($99/yr) at
+   developer.apple.com — personal account is fine; approval usually takes
+   a day or so.
+2. **Create the certificate**: install Xcode, then Xcode → Settings →
+   Accounts → your Apple ID → *Manage Certificates…* → **+** →
+   **Developer ID Application**. It lands in your keychain; electron-builder
+   finds it automatically.
+3. **Notarization credentials** (Apple scans the app, ~2 minutes,
+   automatic): create an *app-specific password* at account.apple.com →
+   Sign-In and Security, then export three env vars before building:
+
+   ```bash
+   export APPLE_ID="you@example.com"
+   export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+   export APPLE_TEAM_ID="YOURTEAMID"   # shown at developer.apple.com/account
+   ```
+
+4. **Build**: `npm run app:build`. electron-builder signs with the
+   Developer ID cert, submits to Apple for notarization, staples the
+   ticket, and drops a shareable `boatsim-….dmg` in `dist-app/`.
+
+Send that DMG any way you like — download, AirDrop, USB stick. It opens
+with no warnings on any Mac.
+
+**Without the $99** you can still share the unsigned DMG, but each friend
+must bypass Gatekeeper manually: open the app once (it gets blocked), then
+System Settings → Privacy & Security → **Open Anyway**. Workable for one
+or two technical friends, annoying for everyone else — and the exact hoops
+get tighter with each macOS release.
+
+(If credentials/cert are missing, the build still succeeds unsigned for
+your own use — signing and notarization are skipped with a warning.)
+
 ## One-time Apple setup for the App Store
 
 1. Join the [Apple Developer Program](https://developer.apple.com/programs/) ($99/yr).
