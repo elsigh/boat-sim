@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="squircle">
+      <rect x="96" y="96" width="832" height="832" rx="186" />
+    </clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d8ecf6" />
+      <stop offset="0.55" stop-color="#a9cde2" />
+      <stop offset="1" stop-color="#8fb8d0" />
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a7396" />
+      <stop offset="0.45" stop-color="#255a7c" />
+      <stop offset="1" stop-color="#143c58" />
+    </linearGradient>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#faf7ec" />
+      <stop offset="1" stop-color="#e8e1cc" />
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <!-- sky -->
+    <rect x="96" y="96" width="832" height="832" fill="url(#sky)" />
+    <circle cx="292" cy="256" r="150" fill="#f5efdd" opacity="0.55" />
+    <circle cx="292" cy="256" r="86" fill="#fbf6e4" opacity="0.8" />
+
+    <!-- sea -->
+    <rect x="96" y="640" width="832" height="288" fill="url(#sea)" />
+    <path d="M96 648 Q 224 630 352 646 T 608 644 T 928 646 V 668 Q 800 682 672 666 T 416 668 T 96 666 Z" fill="#4d84a6" opacity="0.85" />
+    <path d="M96 748 Q 240 730 384 748 T 672 746 T 928 748 V 766 Q 784 782 640 764 T 352 768 T 96 766 Z" fill="#39698c" opacity="0.7" />
+    <path d="M96 852 Q 256 836 416 852 T 736 850 T 928 852 V 872 Q 768 886 608 870 T 288 874 T 96 872 Z" fill="#2c587a" opacity="0.6" />
+
+    <!-- reflection -->
+    <ellipse cx="512" cy="700" rx="210" ry="42" fill="#0e2f47" opacity="0.4" />
+
+    <!-- radar arch + dome -->
+    <path d="M436 306 C 448 236 576 236 588 306" fill="none" stroke="#f5f2e8" stroke-width="20" stroke-linecap="round" />
+    <ellipse cx="512" cy="238" rx="40" ry="22" fill="#f8f5ea" stroke="#d8d1bd" stroke-width="3" />
+    <rect x="452" y="196" width="6" height="46" rx="3" fill="#e9e4d3" />
+    <rect x="566" y="196" width="6" height="46" rx="3" fill="#e9e4d3" />
+
+    <!-- flybridge -->
+    <path d="M430 366 L 438 306 Q 512 292 586 306 L 594 366 Z" fill="#f2eddd" />
+    <path d="M446 344 L 450 316 Q 512 304 574 316 L 578 344 Z" fill="#26343d" opacity="0.92" />
+
+    <!-- salon house -->
+    <path d="M392 470 L 400 366 Q 512 352 624 366 L 632 470 Z" fill="#efe9d8" />
+    <!-- brow -->
+    <path d="M392 380 Q 512 362 632 380 L 630 396 Q 512 378 394 396 Z" fill="#f8f5ea" />
+    <!-- windshield panes -->
+    <path d="M410 452 L 416 398 Q 512 384 608 398 L 614 452 Z" fill="#26343d" />
+    <path d="M472 388 L 468 456 L 480 456 L 484 388 Z" fill="#efe9d8" />
+    <path d="M552 388 L 556 456 L 544 456 L 540 388 Z" fill="#efe9d8" />
+
+    <!-- hull, bow-on with flare -->
+    <path d="M322 486 Q 512 428 702 486 L 700 500 C 690 560 660 612 618 652 L 406 652 C 364 612 334 560 324 500 Z" fill="url(#hull)" />
+    <!-- stem crease -->
+    <path d="M512 442 L 512 652" stroke="#cfc7ae" stroke-width="7" />
+    <!-- caprail -->
+    <path d="M322 486 Q 512 428 702 486" fill="none" stroke="#8a6238" stroke-width="14" stroke-linecap="round" />
+    <!-- boot stripe -->
+    <path d="M406 652 L 618 652 C 626 644 633 636 640 626 L 384 626 C 391 636 398 644 406 652 Z" fill="#1f3a52" />
+
+    <!-- nav lights: boat's port (red) is viewer's right -->
+    <circle cx="352" cy="472" r="12" fill="#37d67a" />
+    <circle cx="352" cy="472" r="20" fill="#37d67a" opacity="0.25" />
+    <circle cx="672" cy="472" r="12" fill="#ff5a5a" />
+    <circle cx="672" cy="472" r="20" fill="#ff5a5a" opacity="0.25" />
+
+    <!-- bow wave -->
+    <path d="M406 650 C 380 660 340 668 300 664 Q 340 690 400 682 Q 430 676 442 664 Z" fill="#eef6f9" opacity="0.95" />
+    <path d="M618 650 C 644 660 684 668 724 664 Q 684 690 624 682 Q 594 676 582 664 Z" fill="#eef6f9" opacity="0.95" />
+    <path d="M442 660 Q 512 646 582 660 Q 560 680 512 682 Q 464 680 442 660 Z" fill="#f4fafc" />
+    <path d="M300 676 Q 380 700 470 690 M 554 690 Q 644 700 724 676" fill="none" stroke="#dcebf2" stroke-width="10" stroke-linecap="round" opacity="0.7" />
+  </g>
+</svg>

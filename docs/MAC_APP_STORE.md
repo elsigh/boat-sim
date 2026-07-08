@@ -45,8 +45,9 @@ game-controller/throttle-quadrant input.
 
 ## Remaining TODOs before submission
 
-- **App icon**: add `electron/resources/icon.icns` (1024px master). Until
-  then builds use the stock Electron icon, which App Store review rejects.
+- ~~App icon~~ Done: `electron/resources/icon.icns`, generated from
+  `icon.svg` by `node scripts/build-icon.mjs` (edit the SVG, re-run to
+  regenerate).
 - **Screenshots + metadata** in App Store Connect (1280×800 or 2560×1600).
 - Consider a **privacy policy URL** (the app collects nothing; a one-liner
   page is fine) — App Store Connect requires the field.
