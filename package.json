@@ -2,6 +2,8 @@
   "name": "boat-sim",
   "version": "0.1.0",
   "private": true,
+  "description": "Twin-screw docking practice in real San Juan Islands marinas",
+  "author": "Lindsey Simon <lsimon@commoner.com>",
   "main": "electron/main.mjs",
   "scripts": {
     "dev": "next dev",
