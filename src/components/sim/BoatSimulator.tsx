@@ -51,7 +51,11 @@ function spawnToPose(spawn: SpawnPoint) {
 }
 
 function defaultSpawnFor(marina: MarinaLayout) {
-  return marina.spawns[0];
+  // Docking practice is the point: prefer an arrival exercise when the
+  // marina offers one.
+  return (
+    marina.spawns.find((spawn) => spawn.kind === "arrival") ?? marina.spawns[0]
+  );
 }
 
 export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
