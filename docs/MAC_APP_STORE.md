@@ -29,13 +29,26 @@ sandbox. Friends double-click the DMG and it just opens.
    finds it automatically.
 3. **Notarization credentials** (Apple scans the app, ~2 minutes,
    automatic): create an *app-specific password* at account.apple.com →
-   Sign-In and Security, then export three env vars before building:
+   Sign-In and Security, then store it **in the macOS Keychain** — don't
+   keep it in dotfiles or CI/hosting dashboards:
 
    ```bash
-   export APPLE_ID="you@example.com"
-   export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-   export APPLE_TEAM_ID="YOURTEAMID"   # shown at developer.apple.com/account
+   xcrun notarytool store-credentials "boatsim-notary" \
+     --apple-id "you@example.com" \
+     --team-id "YOURTEAMID" \
+     --password "xxxx-xxxx-xxxx-xxxx"   # prompts instead if you omit this
    ```
+
+   Then the only thing your shell needs (safe to put in ~/.zshrc) is the
+   profile name:
+
+   ```bash
+   export APPLE_KEYCHAIN_PROFILE="boatsim-notary"
+   ```
+
+   electron-builder picks the profile up and pulls the password from the
+   keychain at build time. (Plain `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD`
+   / `APPLE_TEAM_ID` env vars still work as a fallback.)
 
 4. **Build**: `npm run app:build`. electron-builder signs with the
    Developer ID cert, submits to Apple for notarization, staples the
