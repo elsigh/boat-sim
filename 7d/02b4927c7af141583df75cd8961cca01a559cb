@@ -1,0 +1,30 @@
+next.config.ts
+  s_503510a5adb0be::t_3a99cb0fb99957 9-10
+  s_503510a5adb0be::t_f2ff4e9e46272e 8,11
+scripts/link-lint-typescript.mjs
+  s_503510a5adb0be::t_ca9c0b1fbba003 1-3,10-12,23,40-41
+  s_503510a5adb0be::t_5bd94366939079 4-9,13-22,24-39,42
+package.json
+  s_503510a5adb0be::t_40c7efb0af690f 13
+  s_503510a5adb0be::t_00f513349a41d2 73
+  s_503510a5adb0be::t_abe9ccdf59dde6 8-9,12
+  s_503510a5adb0be::t_dd572883239f70 74
+package-lock.json
+  s_503510a5adb0be::t_3fcc043c3f12a0 10,32-33,2571-2910,10867-10903
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7d02b4927c7af141583df75cd8961cca01a559cb",
+  "prompts": {},
+  "sessions": {
+    "s_503510a5adb0be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "947aa80d-1a01-4457-9cf9-7249688c68bb",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
