@@ -5,10 +5,12 @@
   "main": "electron/main.mjs",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && next build",
     "start": "next start",
     "lint": "eslint",
-    "export": "NEXT_OUTPUT=export next build",
+    "export": "npm run typecheck && NEXT_OUTPUT=export next build",
+    "postinstall": "node scripts/link-lint-typescript.mjs",
     "app:dev": "npm run export && electron .",
     "app:build": "npm run export && electron-builder --mac dmg zip",
     "app:mas": "npm run export && electron-builder --mac mas"
@@ -68,6 +70,7 @@
     "eslint-config-next": "^16.2.10",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
-    "typescript": "^6.0.3"
+    "typescript": "7.0.2",
+    "typescript-lint-runtime": "npm:typescript@6.0.3"
   }
 }
