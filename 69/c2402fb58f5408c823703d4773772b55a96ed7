@@ -1,0 +1,21 @@
+README.md
+  s_2584bfe3d07f58::t_d26882b6ae2d88 38-47,49-63
+  s_2584bfe3d07f58::t_ba6e296a232802 65-66
+  s_2584bfe3d07f58::t_48504e369627ed 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "69c2402fb58f5408c823703d4773772b55a96ed7",
+  "prompts": {},
+  "sessions": {
+    "s_2584bfe3d07f58": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "54f36cba-f1fe-4382-8a88-299771102c60",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
