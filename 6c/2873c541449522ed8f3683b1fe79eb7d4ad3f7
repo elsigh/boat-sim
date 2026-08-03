@@ -1,0 +1,123 @@
+src/components/sim/BoatSimulator.tsx
+  s_2584bfe3d07f58::t_bb6bf4679453f3 670
+  s_2584bfe3d07f58::t_25501a215bc6df 730
+  s_2584bfe3d07f58::t_d482d0b7252d86 243
+  s_2584bfe3d07f58::t_3aea225ee709ca 669,671
+  s_2584bfe3d07f58::t_e82067072c3c63 14
+  s_2584bfe3d07f58::t_9feb7ba47355f5 25-29,34,37,39-40,42,83-88,244-331,344-365,410-417,423-426,652,678,680,684,689-693
+  s_2584bfe3d07f58::t_1f3ce18d5ae410 628-631
+  s_2584bfe3d07f58::t_1b8aa61fe604ed 640
+  s_2584bfe3d07f58::t_1a5e2e0db91cec 603-606
+  s_2584bfe3d07f58::t_07b4649993c0a6 427
+  s_2584bfe3d07f58::t_e744aada371053 694
+src/hooks/useVhfRadio.ts
+  s_2584bfe3d07f58::t_d725a9c1dc5ea3 1-224,230-313,318,322,328-329,338,340,342,355,361-365
+  s_2584bfe3d07f58::t_e406cd016e228c 314-317,319-321,323-327
+  s_2584bfe3d07f58::t_de21f31897348b 330-337,339,341,343-354,356-360
+  s_2584bfe3d07f58::t_79579c070a401b 225-229
+src/components/sim/WashEffects.tsx
+  s_2584bfe3d07f58::t_9feb7ba47355f5 15,75-80,84-85,89-90,94-95,114,119-121,123-127,169-199,241-269
+src/components/sim/MooredBoats.tsx
+  s_2584bfe3d07f58::t_610aca778c2bd8 1-154
+src/hooks/useGamepad.ts
+  s_2584bfe3d07f58::t_88985df35b6f51 508,514-522
+src/components/sim/TurboModeOverlay.tsx
+  s_4b4a2ff53949d2::t_8b5f634c971e87 1-13
+src/components/sim/Marina.tsx
+  s_2584bfe3d07f58::t_9feb7ba47355f5 30-32,34,248,351,365,378
+src/components/sim/SimCameraRig.tsx
+  s_2584bfe3d07f58::t_9feb7ba47355f5 15,33,61-73
+  s_2584bfe3d07f58::t_d82d14124f0256 45
+  s_2584bfe3d07f58::t_44f9fdc0c1b5c9 8-9
+src/components/sim/BoatVisual.tsx
+  s_2584bfe3d07f58::t_9feb7ba47355f5 3-4,12,388-395,404-417,419
+src/components/sim/BerthBearingLine.tsx
+  s_2584bfe3d07f58::t_1efdd8dfc14af4 10
+  s_2584bfe3d07f58::t_545748f7e04c4a 26
+src/components/sim/DamageOverlay.tsx
+  s_2584bfe3d07f58::t_dd22ee2b0dcf51 1-111
+src/lib/marinas/squalicum.ts
+  s_2584bfe3d07f58::t_580f41dba65f2d 236-238,244-247
+src/lib/sim/boat-physics.ts
+  s_2584bfe3d07f58::t_9feb7ba47355f5 11,142-167,293-307
+src/components/sim/DockingOverlay.tsx
+  s_2584bfe3d07f58::t_111d115c0e5571 120
+  s_2584bfe3d07f58::t_165a66d18e1018 57
+  s_2584bfe3d07f58::t_52baf14ee4e268 1036-1087
+  s_2584bfe3d07f58::t_f7e905a0a1b048 829
+  s_2584bfe3d07f58::t_3870544e37df29 964-968,972-976
+  s_2584bfe3d07f58::t_298181f9bfda20 364-365
+  s_2584bfe3d07f58::t_01ea89fe47553c 10
+  s_2584bfe3d07f58::t_ebec97db41da66 969-971
+  s_2584bfe3d07f58::t_cfddca9dacff90 1088-1090
+  s_2584bfe3d07f58::t_7cb7b12cd0068d 1091
+src/components/sim/TurboModeOverlay.module.css
+  s_4b4a2ff53949d2::t_8b5f634c971e87 1-83
+src/components/sim/SmallCraft.tsx
+  s_2584bfe3d07f58::t_145b78bbecb216 1-124
+src/components/sim/ImpactMarks.tsx
+  s_2584bfe3d07f58::t_5831baea01a788 1-92
+src/components/sim/Wayline.tsx
+  s_2584bfe3d07f58::t_789fd761f6b0eb 4-6,8,11,14,18-21,25-31,46-58,73-87,89-102,106,111,116,120,128
+  s_2584bfe3d07f58::t_577ed2bf6d1ff1 22-24,35-45,59-72,88
+src/lib/sim/collision-damage.ts
+  s_2584bfe3d07f58::t_09427ecf7fe3e6 1-202
+src/components/sim/DamageOverlay.module.css
+  s_2584bfe3d07f58::t_519a79f55d0aa5 1-46
+src/lib/sim/rapier-utils.ts
+  s_2584bfe3d07f58::t_93a64b18b20e79 1-31
+src/components/sim/Boat.tsx
+  s_2584bfe3d07f58::t_9910c4c12c0a09 23
+  s_2584bfe3d07f58::t_384ce4a822822b 169
+  s_2584bfe3d07f58::t_eba02d1473c970 250
+  s_2584bfe3d07f58::t_9feb7ba47355f5 5,22,34,39,47,53-58,100,102,106,112-113,117,144-147,164-166,207-210,223,249,251-315,330,346-383
+  s_2584bfe3d07f58::t_d13975c44a5095 150-151,154,160
+  s_2584bfe3d07f58::t_287d54c9a710c9 167
+src/components/sim/MarinaTraffic.tsx
+  s_2584bfe3d07f58::t_e1eeae81565f8c 262-266
+  s_2584bfe3d07f58::t_8d90cca7aa1019 222
+  s_2584bfe3d07f58::t_90cf2371c6b080 1-9,17-18,21-35,75-210,218,220-221,223-228,249-261,267,289-292,295-300,302-308
+  s_2584bfe3d07f58::t_242d7a8eb0b315 268-282,284-288,293-294,301
+  s_2584bfe3d07f58::t_099b240f8ba4fa 19
+  s_2584bfe3d07f58::t_d2bd0f61f52f48 36-38
+  s_2584bfe3d07f58::t_1abef309db1b2a 10-16,20
+  s_2584bfe3d07f58::t_ba9be6b99b9b77 211-217,219
+  s_2584bfe3d07f58::t_63f2743779cb62 283
+  s_2584bfe3d07f58::t_265f4caaff916f 231,241-248
+  s_2584bfe3d07f58::t_5e8ee74d2504b2 229-230,232-240
+  s_2584bfe3d07f58::t_b425df1240ea1f 39-74
+docs/BOAT_SIM_BLOG_POST_DRAFT.md
+  s_205fcf21ccb9d5::t_b1117121353113 1-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "6c2873c541449522ed8f3683b1fe79eb7d4ad3f7",
+  "prompts": {},
+  "sessions": {
+    "s_205fcf21ccb9d5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5c8a-6c8f-7bb1-ba41-d1557bf157b9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    },
+    "s_2584bfe3d07f58": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "54f36cba-f1fe-4382-8a88-299771102c60",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    },
+    "s_4b4a2ff53949d2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f87e0-9b19-7751-abfb-96340b50a349",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
