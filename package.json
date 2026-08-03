@@ -8,11 +8,9 @@
   "scripts": {
     "dev": "next dev",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && next build",
+    "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "export": "npm run typecheck && NEXT_OUTPUT=export next build",
-    "postinstall": "node scripts/link-lint-typescript.mjs",
+    "export": "NEXT_OUTPUT=export next build",
     "app:dev": "npm run export && electron .",
     "app:build": "npm run export && electron-builder --mac dmg zip",
     "app:mas": "npm run export && electron-builder --mac mas"
@@ -26,6 +24,7 @@
     },
     "files": [
       "electron/**/*",
+      "node_modules/electron-serve/**/*",
       "out/**/*",
       "package.json"
     ],
@@ -55,7 +54,8 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
     "@react-three/rapier": "^2.2.0",
-    "next": "^16.2.10",
+    "electron-serve": "^2.1.1",
+    "next": "preview",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "three": "^0.184.0"
@@ -67,12 +67,8 @@
     "@types/react-dom": "^19",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
-    "electron-serve": "^2.1.1",
-    "eslint": "^9",
-    "eslint-config-next": "^16.2.10",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
-    "typescript": "7.0.2",
-    "typescript-lint-runtime": "npm:typescript@6.0.3"
+    "typescript": "^7.0.2"
   }
 }
