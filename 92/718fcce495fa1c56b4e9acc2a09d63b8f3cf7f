@@ -1,0 +1,26 @@
+src/components/sim/Wayline.tsx
+  s_2584bfe3d07f58::t_9517aca0817440 6-7,10,12-14,18-20,24-26,40-42,44,47-63,66-70,72-73,76-78,80-82,88-105,107-108,111,124-125,130-134,147,160,163-168
+  s_2584bfe3d07f58::t_3b6a365f6d6ea3 109,112-114,116-117,119-121,126-127
+  s_2584bfe3d07f58::t_da3860cc3bf0b6 27-37
+  s_2584bfe3d07f58::t_f4973878d2a688 142-144,156
+src/lib/sim/water-nav.ts
+  s_2584bfe3d07f58::t_40c4d037d76837 1-484
+src/components/sim/BoatSimulator.tsx
+  s_2584bfe3d07f58::t_0dc0b904a4978f 631-635
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "92718fcce495fa1c56b4e9acc2a09d63b8f3cf7f",
+  "prompts": {},
+  "sessions": {
+    "s_2584bfe3d07f58": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "54f36cba-f1fe-4382-8a88-299771102c60",
+        "model": "claude-fable-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
