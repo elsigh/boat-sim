@@ -29,7 +29,6 @@ import {
 } from "@/lib/sim/collision-damage";
 import { useViewportCamera } from "@/hooks/useViewportCamera";
 
-import { BerthBearingLine } from "./BerthBearingLine";
 import { Boat } from "./Boat";
 import { DamageOverlay } from "./DamageOverlay";
 import { DockingCelebration } from "./DockingCelebration";
@@ -587,14 +586,6 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     applyStop(stop);
   };
 
-  const waylinePoints = useMemo(() => {
-    if (!selectedBerth) {
-      return [];
-    }
-
-    return marina.approachLines?.[selectedBerth.id] ?? [];
-  }, [marina.approachLines, selectedBerth]);
-
   return (
     <main className="relative h-dvh min-h-dvh overflow-hidden bg-[#07131c] text-white">
       <Canvas
@@ -637,8 +628,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         />
 
         <Water />
-        <Wayline bodyRef={boatBodyRef} points={waylinePoints} />
-        <BerthBearingLine bodyRef={boatBodyRef} berth={selectedBerth} />
+        <Wayline
+          bodyRef={boatBodyRef}
+          layout={marina}
+          target={selectedBerth?.center ?? null}
+        />
         <DockingCelebration
           active={celebration.active}
           celebrationId={celebration.id}
