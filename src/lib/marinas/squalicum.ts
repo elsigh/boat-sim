@@ -233,13 +233,18 @@ export const SQUALICUM_HARBOR: MarinaLayout = {
     summary: "SW sea breeze 12 kt (typical summer afternoon); negligible current inside.",
   },
   approachLines: {
+    // The berth is on the float's NE face: round the SE tip with ~9 m of
+    // clearance, then run NW up the fairway and close at a shallow angle.
+    // Never route across the float itself.
     "nwe-side-tie": [
       [-40, -130],
       [0, -70],
       [50, 20],
       [95, 120],
-      [125, 168],
-      [108, 195],
+      [138, 172],
+      [141, 196],
+      [120, 206],
+      [104, 211.5],
       [98.5, 212.5],
     ],
     "east-slip": [

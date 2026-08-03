@@ -8,6 +8,7 @@ export type BoatControlInputs = {
   portThrottle: number;
   starboardThrottle: number;
   bowThruster: number;
+  turboSpeedMultiplier?: number;
 };
 
 export type BoatState = {
@@ -138,6 +139,32 @@ function throttleToThrust(
   return baseThrust * slipReduction;
 }
 
+function estimateFullAheadSpeed(config: BoatConfiguration) {
+  let low = 0;
+  let high = 80;
+
+  // Solve for the calm-water speed where both props' available thrust is
+  // balanced by surge drag. Keeping this derived from each boat profile makes
+  // the easter egg equally ridiculous for boats with very different hulls.
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const speed = (low + high) * 0.5;
+    const thrust = throttleToThrust(1, speed, config) * 2;
+    const drag = -waterResistance(
+      speed,
+      config.waterLinearDragSurge,
+      config.waterDragSurge,
+    );
+
+    if (thrust > drag) {
+      low = speed;
+    } else {
+      high = speed;
+    }
+  }
+
+  return (low + high) * 0.5;
+}
+
 // In this right-handed, y-up, z-forward frame the boat's starboard side is
 // local -x (and world +x renders as west). A left-handed prop in astern walks
 // the stern to starboard (-x); a right-handed prop walks it to port (+x).
@@ -263,6 +290,21 @@ export function computeBoatPhysics(
       config.waterDragSurge,
     ),
   );
+  const turboSpeedMultiplier = Math.max(1, input.turboSpeedMultiplier ?? 1);
+
+  if (turboSpeedMultiplier > 1) {
+    const targetSurgeSpeed = estimateFullAheadSpeed(config) * turboSpeedMultiplier;
+    const speedError = targetSurgeSpeed - waterRelativeVelocity.z;
+    const commandedAcceleration = Math.max(-18, Math.min(18, speedError * 1.15));
+
+    // This is intentionally not plausible propulsion. Replace the normal surge
+    // balance with a strong speed controller, including cancellation of the two
+    // ordinary prop forces that are applied separately below. Equilibrium lands
+    // at a true 10x the profile's normal full-ahead speed instead of merely
+    // applying 10x thrust (which yields only ~sqrt(10)x under quadratic drag).
+    waterDragLocal.z =
+      config.massKg * commandedAcceleration - portThrust - starboardThrust;
+  }
 
   const dynamicPressure = 0.5 * 1.225 * config.windageAreaM2;
   const windForceLocal = new Vector3(

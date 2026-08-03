@@ -12,6 +12,7 @@ type WashEffectsProps = {
   boat: BoatProfile;
   controlsRef: MutableRefObject<GamepadSnapshot>;
   engineStateRef: MutableRefObject<TwinEngineState>;
+  turboActive: boolean;
 };
 
 const washVertexShader = `
@@ -71,16 +72,27 @@ function useWashUniforms() {
   );
 }
 
-export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsProps) {
+export function WashEffects({
+  boat,
+  controlsRef,
+  engineStateRef,
+  turboActive,
+}: WashEffectsProps) {
   const portUniforms = useWashUniforms();
   const starboardUniforms = useWashUniforms();
   const bowUniforms = useWashUniforms();
+  const portTurboUniforms = useWashUniforms();
+  const starboardTurboUniforms = useWashUniforms();
   const portMaterialRef = useRef<ShaderMaterial | null>(null);
   const starboardMaterialRef = useRef<ShaderMaterial | null>(null);
   const bowMaterialRef = useRef<ShaderMaterial | null>(null);
+  const portTurboMaterialRef = useRef<ShaderMaterial | null>(null);
+  const starboardTurboMaterialRef = useRef<ShaderMaterial | null>(null);
   const portGroupRef = useRef<Group | null>(null);
   const starboardGroupRef = useRef<Group | null>(null);
   const bowMeshRef = useRef<Mesh | null>(null);
+  const portTurboGroupRef = useRef<Group | null>(null);
+  const starboardTurboGroupRef = useRef<Group | null>(null);
 
   useFrame((state) => {
     const time = state.clock.elapsedTime;
@@ -99,14 +111,20 @@ export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsPr
       }
 
       const magnitude = Math.min(1, Math.abs(throttle));
-      material.uniforms.uStrength.value = magnitude * 0.85;
+      material.uniforms.uStrength.value = magnitude * (turboActive ? 1.2 : 0.85);
       material.uniforms.uTime.value = time;
 
       if (throttle >= 0) {
         // Ahead: wash streams aft of the transom, longer with more power.
-        const length = 3 + magnitude * 9;
+        const length = turboActive
+          ? boat.lengthM * 3.8
+          : 3 + magnitude * 9;
         group.position.set(lateralX, WATER_LOCAL_Y, sternZ - length * 0.42);
-        group.scale.set(1.6 + magnitude * 0.9, 1, length);
+        group.scale.set(
+          turboActive ? boat.beamM * 0.9 : 1.6 + magnitude * 0.9,
+          1,
+          length,
+        );
       } else {
         // Astern: discharge boils forward along the quarter.
         const length = 2.5 + magnitude * 4.5;
@@ -148,6 +166,37 @@ export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsPr
       bowMesh.scale.set(reach, 1, 1.8 + magnitude * 0.7);
       bowMesh.visible = magnitude > 0.02;
     }
+
+    const updateTurboWake = (
+      group: Group | null,
+      material: ShaderMaterial | null,
+      side: -1 | 1,
+    ) => {
+      if (!group || !material) {
+        return;
+      }
+
+      const wakeLength = boat.lengthM * 4.6;
+      const strength = turboActive ? 1 : 0;
+      material.uniforms.uStrength.value +=
+        (strength - material.uniforms.uStrength.value) * 0.12;
+      material.uniforms.uTime.value = time * 1.8;
+      group.visible = material.uniforms.uStrength.value > 0.01;
+      group.position.set(
+        side * boat.beamM * 0.52,
+        WATER_LOCAL_Y + 0.015,
+        boat.lengthM * 0.38 - wakeLength * 0.5,
+      );
+      group.rotation.y = side * 0.075;
+      group.scale.set(boat.beamM * 0.72, 1, wakeLength);
+    };
+
+    updateTurboWake(portTurboGroupRef.current, portTurboMaterialRef.current, 1);
+    updateTurboWake(
+      starboardTurboGroupRef.current,
+      starboardTurboMaterialRef.current,
+      -1,
+    );
   });
 
   return (
@@ -189,6 +238,35 @@ export function WashEffects({ boat, controlsRef, engineStateRef }: WashEffectsPr
           depthWrite={false}
         />
       </mesh>
+      {[
+        {
+          key: "port-turbo",
+          groupRef: portTurboGroupRef,
+          materialRef: portTurboMaterialRef,
+          uniforms: portTurboUniforms,
+        },
+        {
+          key: "starboard-turbo",
+          groupRef: starboardTurboGroupRef,
+          materialRef: starboardTurboMaterialRef,
+          uniforms: starboardTurboUniforms,
+        },
+      ].map(({ key, groupRef, materialRef, uniforms }) => (
+        <group key={key} ref={groupRef}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[1, 1]} />
+            <shaderMaterial
+              ref={materialRef}
+              uniforms={uniforms}
+              vertexShader={washVertexShader}
+              fragmentShader={washFragmentShader}
+              transparent
+              depthWrite={false}
+              depthTest={false}
+            />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }

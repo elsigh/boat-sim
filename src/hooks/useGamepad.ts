@@ -505,12 +505,21 @@ export function useGamepad(options?: UseGamepadOptions) {
           return gamepadSnapshot;
         }
 
-        return buildKeyboardSnapshot(
+        const keyboardSnapshot = buildKeyboardSnapshot(
           keyboardState.portThrottle,
           keyboardState.starboardThrottle,
           keyboardState.bowThruster,
           true,
         );
+
+        // Keyboard only ever drives the levers. Engine masters and ignition
+        // live on the quadrant's switches, so hardware buttons stay live even
+        // while the keys have the throttle.
+        if (gamepadSnapshot.connected) {
+          keyboardSnapshot.rawButtons = gamepadSnapshot.rawButtons;
+        }
+
+        return keyboardSnapshot;
       }
 
       if (gamepadSnapshot.connected) {

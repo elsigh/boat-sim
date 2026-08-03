@@ -7,6 +7,7 @@ import type { PointerEventHandler, WheelEventHandler } from "react";
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
 import type { EngineChannelState, TwinEngineState } from "@/hooks/useEngineState";
+import type { VhfRadioState } from "@/hooks/useVhfRadio";
 import type { Berth, MarinaLayout, SpawnPoint } from "@/lib/marinas/types";
 import type { CruiseScenario } from "@/lib/scenarios/san-juan-aug-2026";
 import type { BerthGuidance } from "@/lib/sim/berth-guidance";
@@ -53,6 +54,7 @@ type DockingOverlayProps = {
   selectedBerth: Berth | null;
   selectedBoat: BoatProfile;
   selectedSpawn: SpawnPoint;
+  vhfRadio: VhfRadioState;
   onViewportWheel: WheelEventHandler<HTMLDivElement>;
   scenario: CruiseScenario;
   telemetry: DockingTelemetry;
@@ -115,6 +117,7 @@ export function DockingOverlay({
   selectedBerth,
   selectedBoat,
   selectedSpawn,
+  vhfRadio,
   onViewportWheel,
   scenario,
   telemetry,
@@ -357,6 +360,8 @@ export function DockingOverlay({
               quadrantIdleCalibrated={quadrantIdleCalibrated}
             />
           </div>
+
+          <RadioPanel radio={vhfRadio} channel={marina.vhfChannel} />
 
           <EnvironmentPanel
             conditionsMode={conditionsMode}
@@ -821,7 +826,7 @@ function EngineNotice({
 
 function HelmInfoPanel({ telemetry }: { telemetry: DockingTelemetry }) {
   return (
-    <div className="mt-auto rounded-2xl border border-white/12 bg-slate-950/76 px-3 py-2.5 shadow-2xl backdrop-blur-xl">
+    <div className="rounded-2xl border border-white/12 bg-slate-950/76 px-3 py-2.5 shadow-2xl backdrop-blur-xl">
       <div className="flex items-center justify-between gap-4">
         <p className="text-[0.65rem] uppercase tracking-[0.3em] text-sky-100/70">
           Helm Data
@@ -956,7 +961,19 @@ function ControllerSetup({
         </span>
       </button>
 
-      {open ? (
+      {open && !hardwareHelmConnected ? (
+        <div className="mt-1.5 rounded-lg bg-white/5 px-2 py-1.5 text-[0.58rem] text-slate-400">
+          <p className="uppercase tracking-[0.16em] text-slate-300">No USB helm detected</p>
+          <p className="mt-1 text-[0.55rem] leading-relaxed text-slate-500">
+            Plug in the quadrant and press any button on it — browsers hide
+            controllers until a button is pressed. Safari won't see the
+            quadrant at all; use Chrome. Keyboard helm: W/S port, I/K
+            starboard, A/D thruster.
+          </p>
+        </div>
+      ) : null}
+
+      {open && hardwareHelmConnected ? (
         <div className="mt-1.5 space-y-1.5">
           <ControllerStatus controls={controls} />
 
@@ -1012,6 +1029,62 @@ function ControllerSetup({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RadioPanel({
+  channel,
+  radio,
+}: {
+  channel: string | undefined;
+  radio: VhfRadioState;
+}) {
+  if (!radio.supported) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-auto mt-auto rounded-2xl border border-white/12 bg-slate-950/74 px-3 py-2 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="text-[0.65rem] uppercase tracking-[0.3em] text-orange-100/70">
+            VHF
+          </p>
+          <p className="truncate font-mono text-[0.62rem] uppercase tracking-[0.14em] text-slate-300">
+            CH {channel ?? "16"}
+          </p>
+          {radio.monitoring ? (
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full transition ${
+                radio.receiving
+                  ? "bg-emerald-300 shadow-[0_0_8px_rgba(110,231,183,0.9)]"
+                  : "bg-emerald-700/70"
+              }`}
+              title={radio.receiving ? "Receiving" : "Monitoring"}
+            />
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onPointerDown={stopPointerPropagation}
+          onClick={radio.toggleMonitoring}
+          className={`shrink-0 rounded-full border px-3 py-1 text-[0.6rem] uppercase tracking-[0.2em] transition ${
+            radio.monitoring
+              ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+              : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+          }`}
+        >
+          {radio.monitoring ? "Monitoring" : "Off"}
+        </button>
+      </div>
+      <p className="mt-1 text-[0.55rem] text-slate-500">
+        {radio.monitoring
+          ? radio.receiving
+            ? "Traffic on the harbor channel…"
+            : "Squelch closed — standing by."
+          : "Radio is off. Harbor traffic goes unheard."}
+      </p>
     </div>
   );
 }

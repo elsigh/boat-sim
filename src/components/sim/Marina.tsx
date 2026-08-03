@@ -27,9 +27,11 @@ import type {
 
 const CONTACT_FRICTION = 0.01;
 const CONTACT_RESTITUTION = 0;
-const DOCK_DECK_TOP_Y = 0.36;
+// Real floating docks carry ~0.5 m of freeboard; the deck has to read as a
+// structure you could step onto, not a raft awash at the waterline.
+const DOCK_DECK_TOP_Y = 0.58;
 const DOCK_COLLIDER_HALF_HEIGHT = 1.2;
-const PILING_HEIGHT = 3.9;
+const PILING_HEIGHT = 4.3;
 
 type MarinaProps = {
   layout: MarinaLayout;
@@ -243,7 +245,7 @@ function InstancedTrees({ clusters }: { clusters: TreeCluster[] }) {
 function DockVisual({ dock }: { dock: DockFloat }) {
   const [width, length] = dock.size;
   const deckColor = dock.color ?? (dock.kind === "pier" ? "#8a7a63" : "#a89680");
-  const deckHeight = dock.kind === "breakwater" ? 0.5 : 0.22;
+  const deckHeight = dock.kind === "breakwater" ? 0.85 : 0.48;
   const deckY = DOCK_DECK_TOP_Y - deckHeight * 0.5;
 
   return (
@@ -346,6 +348,7 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
         {layout.docks.map((dock) => (
           <CuboidCollider
             key={`collider-${dock.id}`}
+            name={`dock:${dock.id}`}
             args={[dock.size[0] * 0.5, DOCK_COLLIDER_HALF_HEIGHT, dock.size[1] * 0.5]}
             position={[dock.position[0], DOCK_COLLIDER_HALF_HEIGHT - 0.3, dock.position[1]]}
             rotation={[0, degToRad(dock.rotationDeg ?? 0), 0]}
@@ -359,6 +362,7 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
           pilingPositions(run).map((position, index) => (
             <CylinderCollider
               key={`piling-${run.id}-${index}`}
+              name={`piling:${run.id}-${index}`}
               args={[PILING_HEIGHT * 0.5, run.radiusM ?? 0.2]}
               position={[position[0], PILING_HEIGHT * 0.5 - 0.7, position[1]]}
               friction={CONTACT_FRICTION}
@@ -371,6 +375,7 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
         {layout.land.map((land) => (
           <CuboidCollider
             key={`land-${land.id}`}
+            name={`land:${land.id}`}
             args={[land.size[0] * 0.5, Math.max(2, (land.heightM ?? 2.5) * 0.5) + 1, land.size[1] * 0.5]}
             position={[land.position[0], (land.heightM ?? 2.5) * 0.5, land.position[1]]}
             rotation={[0, degToRad(land.rotationDeg ?? 0), 0]}

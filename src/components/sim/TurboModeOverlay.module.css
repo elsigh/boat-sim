@@ -1,0 +1,83 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgb(0 0 0 / 72%) 0 8%, transparent 19% 81%, rgb(0 0 0 / 72%) 92%),
+    radial-gradient(circle at center, transparent 24%, rgb(1 9 15 / 38%) 100%);
+  animation: turbo-cut 3s ease-out both;
+}
+
+.speedLines {
+  position: absolute;
+  inset: -40%;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg 5.5deg,
+    rgb(198 242 255 / 18%) 5.7deg 5.95deg,
+    transparent 6.2deg 11deg
+  );
+  mask-image: radial-gradient(circle, transparent 0 18%, black 42% 100%);
+  animation: turbo-lines 750ms linear infinite;
+}
+
+.title {
+  position: relative;
+  margin: 0;
+  color: #f7fdff;
+  font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  font-size: clamp(4.5rem, 15vw, 13rem);
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 0.78;
+  text-align: center;
+  text-transform: uppercase;
+  transform: rotate(-12deg) skewX(-8deg);
+  -webkit-text-stroke: clamp(2px, 0.45vw, 7px) #06283d;
+  filter: drop-shadow(0.05em 0.06em 0 #00a6d9) drop-shadow(0.09em 0.1em 0 #ff6a00);
+  animation: turbo-title 3s cubic-bezier(0.16, 0.9, 0.2, 1) both;
+}
+
+.title span {
+  display: block;
+  font-size: 0.28em;
+  letter-spacing: 0.42em;
+  line-height: 1;
+  transform: translateX(0.15em);
+  -webkit-text-stroke-width: clamp(1px, 0.2vw, 3px);
+}
+
+@keyframes turbo-cut {
+  0% { opacity: 0; }
+  8%, 78% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes turbo-title {
+  0% { opacity: 0; transform: translate3d(-90vw, 34vh, 0) rotate(-12deg) skewX(-8deg) scale(0.45); }
+  18% { opacity: 1; transform: translate3d(0, 0, 0) rotate(-12deg) skewX(-8deg) scale(1.08); }
+  26%, 72% { opacity: 1; transform: translate3d(0, 0, 0) rotate(-12deg) skewX(-8deg) scale(1); }
+  100% { opacity: 0; transform: translate3d(85vw, -32vh, 0) rotate(-12deg) skewX(-8deg) scale(1.25); }
+}
+
+@keyframes turbo-lines {
+  from { transform: scale(0.72) rotate(0); opacity: 0.35; }
+  to { transform: scale(1.08) rotate(4deg); opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .speedLines,
+  .title {
+    animation: none;
+  }
+
+  .overlay {
+    background: rgb(1 9 15 / 52%);
+  }
+}

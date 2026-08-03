@@ -1,0 +1,46 @@
+.flash {
+  animation: damage-flash 650ms ease-out forwards;
+}
+
+.flashSevere {
+  animation: damage-flash-severe 900ms ease-out forwards;
+}
+
+.incident {
+  animation: incident-in 300ms ease-out;
+}
+
+@keyframes damage-flash {
+  0% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes damage-flash-severe {
+  0% {
+    opacity: 0.6;
+  }
+  18% {
+    opacity: 0.25;
+  }
+  36% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes incident-in {
+  0% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

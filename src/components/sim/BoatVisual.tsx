@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
 import {
   CatmullRomCurve3,
   Color,
@@ -8,6 +9,7 @@ import {
   Shape,
   TubeGeometry,
   Vector3,
+  type Group,
 } from "three";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
@@ -383,7 +385,14 @@ function GrandBanksTopsides({ boat }: { boat: BoatProfile }) {
   );
 }
 
-export function BoatVisual({ boat }: { boat: BoatProfile }) {
+export function BoatVisual({
+  boat,
+  turboActive,
+}: {
+  boat: BoatProfile;
+  turboActive: boolean;
+}) {
+  const visualRef = useRef<Group | null>(null);
   const hullGeometry = useHullGeometry(boat.beamM, boat.lengthM);
   const deckGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 0.9, 0.07, DECK_Y);
   const bootStripeGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 1.004, 0.14, -0.12);
@@ -392,8 +401,22 @@ export function BoatVisual({ boat }: { boat: BoatProfile }) {
   const lifelineGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.955, 1.18, 0.024);
   const stanchions = useStanchionPositions(boat.beamM, boat.lengthM, 0.955);
 
+  useFrame((_, delta) => {
+    const visual = visualRef.current;
+
+    if (!visual) {
+      return;
+    }
+
+    const smoothing = 1 - Math.exp(-delta * (turboActive ? 2.8 : 4.5));
+    const targetPitch = turboActive ? -0.16 : 0;
+    const targetLift = turboActive ? 0.42 : 0;
+    visual.rotation.x += (targetPitch - visual.rotation.x) * smoothing;
+    visual.position.y += (targetLift - visual.position.y) * smoothing;
+  });
+
   return (
-    <group>
+    <group ref={visualRef}>
       <mesh castShadow receiveShadow geometry={hullGeometry}>
         <meshStandardMaterial
           color={new Color(boat.visual.hullColor)}

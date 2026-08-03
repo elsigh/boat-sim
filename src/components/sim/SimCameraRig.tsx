@@ -5,11 +5,14 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { type MutableRefObject, useEffect, useRef } from "react";
 import { Quaternion, Vector3 } from "three";
 
+import { liveRigidBody } from "@/lib/sim/rapier-utils";
+
 type SimCameraRigProps = {
   boatLengthM: number;
   bodyRef: MutableRefObject<RapierRigidBody | null>;
   pitchOffset: number;
   planZoom: number;
+  turboCinematic: boolean;
   viewMode: "plan" | "forward";
   yawOffset: number;
 };
@@ -27,6 +30,7 @@ export function SimCameraRig({
   bodyRef,
   pitchOffset,
   planZoom,
+  turboCinematic,
   viewMode,
   yawOffset,
 }: SimCameraRigProps) {
@@ -38,7 +42,7 @@ export function SimCameraRig({
   }, [camera]);
 
   useFrame((_, delta) => {
-    const body = bodyRef.current;
+    const body = liveRigidBody(bodyRef);
 
     if (!body) {
       return;
@@ -54,7 +58,19 @@ export function SimCameraRig({
     rightVector.set(1, 0, 0).applyQuaternion(boatQuaternion).normalize();
     const heading = Math.atan2(forwardVector.x, forwardVector.z);
 
-    if (viewMode === "plan") {
+    if (turboCinematic) {
+      const cameraDistance = Math.max(31, boatLengthM * 2.15);
+
+      desiredPosition
+        .copy(boatPosition)
+        .addScaledVector(forwardVector, -cameraDistance)
+        .addScaledVector(rightVector, boatLengthM * 0.34);
+      desiredPosition.y += Math.max(5.2, boatLengthM * 0.32);
+      desiredTarget
+        .copy(boatPosition)
+        .addScaledVector(forwardVector, boatLengthM * 1.45);
+      desiredTarget.y += 1.35;
+    } else if (viewMode === "plan") {
       const orbitHeading = heading + Math.PI + yawOffset;
       const polar = Math.min(1.04, Math.max(0.34, 0.42 + pitchOffset));
       const cameraDistance = Math.max(planZoom, boatLengthM * 1.6);

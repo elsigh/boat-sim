@@ -7,6 +7,7 @@ import { type MutableRefObject, useRef } from "react";
 import type { Line2 } from "three-stdlib";
 
 import type { Berth } from "@/lib/marinas/types";
+import { liveRigidBody } from "@/lib/sim/rapier-utils";
 
 type BerthBearingLineProps = {
   bodyRef: MutableRefObject<RapierRigidBody | null>;
@@ -22,7 +23,7 @@ export function BerthBearingLine({ bodyRef, berth }: BerthBearingLineProps) {
 
   useFrame(() => {
     const line = lineRef.current;
-    const body = bodyRef.current;
+    const body = liveRigidBody(bodyRef);
 
     if (!line || !body || !berth) {
       return;

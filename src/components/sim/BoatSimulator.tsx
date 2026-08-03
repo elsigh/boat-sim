@@ -11,6 +11,7 @@ import { BOAT_CATALOG, DEFAULT_BOAT_SLUG, getBoatProfile } from "@/lib/boats/cat
 import { useGamepad } from "@/hooks/useGamepad";
 import { useEngineAudio } from "@/hooks/useEngineAudio";
 import { useEngineState } from "@/hooks/useEngineState";
+import { useVhfRadio } from "@/hooks/useVhfRadio";
 import { getMarinaLayout } from "@/lib/marinas";
 import type { MarinaLayout, SpawnPoint } from "@/lib/marinas/types";
 import { SAN_JUAN_AUG_2026_SCENARIO } from "@/lib/scenarios/san-juan-aug-2026";
@@ -21,14 +22,24 @@ import {
   DEFAULT_DOCKING_TELEMETRY,
   type DockingTelemetry,
 } from "@/lib/sim/boat-physics";
+import {
+  type ImpactIncident,
+  ImpactTracker,
+  type RawImpact,
+} from "@/lib/sim/collision-damage";
 import { useViewportCamera } from "@/hooks/useViewportCamera";
 
 import { BerthBearingLine } from "./BerthBearingLine";
 import { Boat } from "./Boat";
+import { DamageOverlay } from "./DamageOverlay";
 import { DockingCelebration } from "./DockingCelebration";
 import { DockingOverlay } from "./DockingOverlay";
+import { ImpactMarks } from "./ImpactMarks";
 import { Marina } from "./Marina";
+import { MarinaTraffic } from "./MarinaTraffic";
+import { MooredBoats } from "./MooredBoats";
 import { SimCameraRig } from "./SimCameraRig";
+import { TurboModeOverlay } from "./TurboModeOverlay";
 import { Wayline } from "./Wayline";
 import { Water } from "./Water";
 
@@ -69,6 +80,12 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   const [selectedBoatSlug, setSelectedBoatSlug] = useState(initialBoatSlug ?? DEFAULT_BOAT_SLUG);
   const [conditionsMode, setConditionsMode] = useState<"typical" | "calm">("typical");
   const [hudVisible, setHudVisible] = useState(true);
+  const [turboActive, setTurboActive] = useState(false);
+  const [turboAnnouncement, setTurboAnnouncement] = useState({
+    id: 0,
+    visible: false,
+  });
+  const turboAnnouncementTimerRef = useRef<number | null>(null);
   const [leversSwapped, setLeversSwapped] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -223,6 +240,95 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
 
   const engineState = useEngineState(controls, softwareEngineControls);
   const engineAudio = useEngineAudio(engineState);
+  const vhfRadio = useVhfRadio();
+  const turboEligible =
+    engineState.port.running &&
+    engineState.starboard.running &&
+    engineState.port.demandThrottle >= 0.96 &&
+    engineState.starboard.demandThrottle >= 0.96;
+
+  useEffect(() => {
+    const dismissAnnouncement = () => {
+      if (turboAnnouncementTimerRef.current) {
+        window.clearTimeout(turboAnnouncementTimerRef.current);
+        turboAnnouncementTimerRef.current = null;
+      }
+
+      setTurboAnnouncement((current) =>
+        current.visible ? { ...current, visible: false } : current,
+      );
+    };
+    const handleTurboKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.code !== "KeyT" ||
+        event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+
+      if (turboActive) {
+        setTurboActive(false);
+        dismissAnnouncement();
+        return;
+      }
+
+      if (!turboEligible) {
+        return;
+      }
+
+      setTurboActive(true);
+      setTurboAnnouncement((current) => ({
+        id: current.id + 1,
+        visible: true,
+      }));
+
+      if (turboAnnouncementTimerRef.current) {
+        window.clearTimeout(turboAnnouncementTimerRef.current);
+      }
+
+      turboAnnouncementTimerRef.current = window.setTimeout(() => {
+        turboAnnouncementTimerRef.current = null;
+        setTurboAnnouncement((current) => ({ ...current, visible: false }));
+      }, 3000);
+    };
+
+    window.addEventListener("keydown", handleTurboKeyDown);
+    return () => window.removeEventListener("keydown", handleTurboKeyDown);
+  }, [turboActive, turboEligible]);
+
+  useEffect(() => {
+    if (turboActive && !turboEligible) {
+      setTurboActive(false);
+      setTurboAnnouncement((current) => ({ ...current, visible: false }));
+
+      if (turboAnnouncementTimerRef.current) {
+        window.clearTimeout(turboAnnouncementTimerRef.current);
+        turboAnnouncementTimerRef.current = null;
+      }
+    }
+  }, [turboActive, turboEligible]);
+
+  useEffect(
+    () => () => {
+      if (turboAnnouncementTimerRef.current) {
+        window.clearTimeout(turboAnnouncementTimerRef.current);
+      }
+    },
+    [],
+  );
   const environment = useMemo(
     () =>
       conditionsMode === "calm"
@@ -234,6 +340,28 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     () => (selectedBerth ? computeBerthGuidance(telemetry, selectedBerth) : null),
     [selectedBerth, telemetry],
   );
+
+  // Collision damage: the physics callback streams raw contacts; the tracker
+  // filters them into discrete incidents that cost hull integrity.
+  const impactTrackerRef = useRef(new ImpactTracker());
+  const [hullIntegrityPct, setHullIntegrityPct] = useState(100);
+  const [incidents, setIncidents] = useState<ImpactIncident[]>([]);
+  const boatLengthRef = useRef(selectedBoat.lengthM);
+
+  useEffect(() => {
+    boatLengthRef.current = selectedBoat.lengthM;
+  }, [selectedBoat.lengthM]);
+
+  const handleImpact = useCallback((raw: RawImpact) => {
+    const incident = impactTrackerRef.current.register(raw, boatLengthRef.current);
+
+    if (!incident) {
+      return;
+    }
+
+    setHullIntegrityPct((current) => Math.max(0, current - incident.hullDamagePct));
+    setIncidents((current) => [...current.slice(-39), incident]);
+  }, []);
 
   // Docking celebration: armed only after the boat has genuinely been away
   // from the berth, so spawning already-docked never fires it.
@@ -279,10 +407,23 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
 
   const resetBoatTo = useCallback(
     (spawn: SpawnPoint, anchorCoordinate: { lat: number; lon: number }) => {
+      setTurboActive(false);
+      setTurboAnnouncement((current) => ({ ...current, visible: false }));
+
+      if (turboAnnouncementTimerRef.current) {
+        window.clearTimeout(turboAnnouncementTimerRef.current);
+        turboAnnouncementTimerRef.current = null;
+      }
+
       celebrationArmedRef.current = false;
       setCelebration((current) =>
         current.active ? { ...current, active: false } : current,
       );
+
+      // A fresh exercise means a repaired boat and a repaired marina.
+      impactTrackerRef.current.reset();
+      setHullIntegrityPct(100);
+      setIncidents([]);
 
       if (dockTimerRef.current) {
         window.clearTimeout(dockTimerRef.current);
@@ -459,7 +600,10 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       <Canvas
         className="!absolute !inset-0 !h-full !w-full"
         shadows
-        camera={{ position: [28, 18, 38], fov: 42 }}
+        // near=1.5 (vs the 0.1 default) is what keeps coplanar detail — deck
+        // caps, rub rails, dock skirts — from z-fighting at plan-view
+        // distances; nothing renderable ever gets within 1.5 m of the camera.
+        camera={{ position: [28, 18, 38], fov: 42, near: 1.5, far: 5000 }}
         gl={{ antialias: true }}
       >
         <color attach="background" args={["#a9c2d2"]} />
@@ -481,6 +625,10 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
           color="#fff2dd"
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
+          // Bias kills shadow acne — the flashing shadow-texel squares on
+          // decks and cabin tops seen from the plan camera.
+          shadow-bias={-0.0002}
+          shadow-normalBias={0.5}
           shadow-camera-left={-160}
           shadow-camera-right={160}
           shadow-camera-top={160}
@@ -489,7 +637,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         />
 
         <Water />
-        <Wayline points={waylinePoints} />
+        <Wayline bodyRef={boatBodyRef} points={waylinePoints} />
         <BerthBearingLine bodyRef={boatBodyRef} berth={selectedBerth} />
         <DockingCelebration
           active={celebration.active}
@@ -501,6 +649,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
           bodyRef={boatBodyRef}
           pitchOffset={viewportCamera.pitch}
           planZoom={planZoom}
+          turboCinematic={turboAnnouncement.visible}
           viewMode={viewMode}
           yawOffset={viewportCamera.yaw}
         />
@@ -517,19 +666,31 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
             selectedBerthId={selectedBerth?.id ?? null}
             docked={guidance?.docked ?? false}
           />
+          <MooredBoats layout={marina} />
+          <MarinaTraffic layout={marina} playerBodyRef={boatBodyRef} />
+          <ImpactMarks incidents={incidents} />
           <Boat
             bodyRef={boatBodyRef}
             boat={selectedBoat}
             controls={controls}
             engineState={engineState}
             environment={environment}
+            hullDamageMarks={incidents}
             initialPose={spawnToPose(initialSpawn)}
+            onImpact={handleImpact}
             onPositionSample={handleBoatPositionSample}
             onTelemetry={handleTelemetrySample}
             resetRequest={resetRequest}
+            turboActive={turboActive}
           />
         </Physics>
       </Canvas>
+
+      {turboAnnouncement.visible ? (
+        <TurboModeOverlay key={turboAnnouncement.id} />
+      ) : null}
+
+      <DamageOverlay hullIntegrityPct={hullIntegrityPct} incidents={incidents} />
 
       <DockingOverlay
         audioEnabled={engineAudio.audioEnabled}
@@ -566,6 +727,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         selectedBerth={selectedBerth}
         selectedBoat={selectedBoat}
         selectedSpawn={selectedSpawn}
+        vhfRadio={vhfRadio}
         onBoatChange={handleBoatChange}
         onSelectLeg={setActiveLegIndex}
         onResetToStop={handleResetToStop}
