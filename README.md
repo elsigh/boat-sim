@@ -11,7 +11,8 @@ Banks 52 Heritage Motoryacht, about 58,000 pounds of her — through the San
 Juan Islands with family and friends aboard. I trained on similar boats about
 five years ago, but five years is enough time for confidence to turn back
 into theory, especially when the theory involves easing 29 tons into a narrow
-slip while wind and current negotiate a different arrangement.
+slip while a Pacific Northwest tidal current negotiates a different
+arrangement.
 
 So I did what any reasonably anxious programmer might do: I built a
 simulator.
@@ -34,14 +35,35 @@ thing this simulator exists to practice.
 
 ![Thrustmaster TCA throttle quadrant](docs/images/thrustmaster.png)
 
-I almost bought a real Glendinning twin-lever marine control head before
-discovering it speaks CAN bus, costs as much as a good dinghy, and would have
-turned "practice docking" into "learn embedded electronics by modifying
-safety-critical marine hardware."
+My first instinct was maximal fidelity: buy the real thing, a Glendinning
+CH2001 twin-lever control head — the hardware that wouldn't feel like a game
+controller because it isn't one. That idea did not survive contact with the
+integration details. Real marine control heads cost upward of $1,500 and
+speak CAN bus / J1939, not USB. Wiring one into a browser would have meant
+gutting a precision piece of boat equipment and rebuilding its electronics —
+at which point the project had drifted from "practice docking" to "learn
+embedded electronics by modifying safety-critical marine hardware." I was
+over my skis. The point was to reduce anxiety, not manufacture a new
+category of it.
 
-Instead: a Thrustmaster TCA throttle quadrant. It was designed for an Airbus,
+Plan B was gloriously plausible: a $200 mechanical dual-lever marine
+throttle, housing cracked open, 10k potentiometers on the lever pivots, and
+a zero-solder Leo Bodnar USB board to present it all as a standard game
+controller. I still like that plan. It is also its own hardware project, and
+I wanted to know whether the simulator was useful before fabricating a helm
+for it.
+
+For a while the helm was a Thrustmaster TWCS — a single flight-sim slider
+pressed into twin-screw service by mapping its one axis as a split throttle:
+mid-travel is dead neutral, above it drives the port engine ahead, below it
+the starboard engine astern. A ridiculous compromise (you can't command most
+port/starboard combinations), but it proved the sim out, and that
+split-slider mode still lives in the input layer.
+
+Where it landed: a Thrustmaster TCA throttle quadrant. Designed for an Airbus,
 but it has the two things that matter — two independent physical levers, and
-a browser can read it through the Gamepad API. The sim handles the
+a browser can read it through the Gamepad API with zero drivers. The sim
+handles the
 airplane-to-boat mismatch: swap-levers for reversed axes, idle-detent
 calibration so lever travel above the detent means ahead and below means
 astern, and the quadrant's switches double as engine masters and ignition.
