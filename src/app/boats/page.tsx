@@ -1,8 +1,10 @@
 import Link from "next/link";
 
-import { BOAT_CATALOG } from "@/lib/boats/catalog";
+import { listBoatProfiles } from "@/lib/boats/catalog";
 
 export default function BoatsPage() {
+  const boats = listBoatProfiles();
+
   return (
     <main className="min-h-dvh bg-[#07131c] px-6 py-8 text-white">
       <div className="mx-auto max-w-6xl">
@@ -26,7 +28,7 @@ export default function BoatsPage() {
         </div>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
-          {BOAT_CATALOG.map((boat) => (
+          {boats.map((boat) => (
             <article
               key={boat.profileSlug}
               className="rounded-3xl border border-white/12 bg-slate-950/70 p-5 shadow-2xl"

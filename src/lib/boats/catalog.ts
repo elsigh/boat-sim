@@ -1,3 +1,4 @@
+import { findSeededBoatProfile, seededBoatProfiles } from "@/lib/autonoma/store";
 import type { BoatConfiguration } from "@/lib/sim/boat-physics";
 
 export type BoatVisualProfile = {
@@ -275,5 +276,78 @@ export function getBoatProfile(slug: string | null | undefined) {
     return BOAT_CATALOG[0];
   }
 
-  return BOAT_CATALOG.find((boat) => boat.profileSlug === slug) ?? BOAT_CATALOG[0];
+  return (
+    BOAT_CATALOG.find((boat) => boat.profileSlug === slug) ??
+    findSeededBoatProfile(slug) ??
+    BOAT_CATALOG[0]
+  );
+}
+
+/** Fields a caller supplies when adding a profile the catalog does not ship. */
+export type BoatProfileInput = {
+  profileSlug: string;
+  displayName: string;
+  manufacturer: string;
+  model: string;
+  simStatus: BoatProfile["simStatus"];
+  /** Length overall as shown in the catalog, e.g. `52'` or `7.85 m`. */
+  loa: string;
+  /** Beam as shown in the catalog, e.g. `15' 5"` or `2.49 m`. */
+  beam: string;
+  summary?: string;
+  homePort?: string;
+  /** Hull length in metres for the physics model. Defaults from the template. */
+  lengthM?: number;
+  /** Beam in metres for the physics model. Defaults from the template. */
+  beamM?: number;
+  templateSlug?: string;
+};
+
+/**
+ * Builds a complete profile from the handful of fields that identify a boat,
+ * inheriting hull geometry, physics tuning and the visual profile from an
+ * existing catalog entry. A profile is a large object with a physics
+ * configuration attached, and a partially filled one would load into the sim
+ * and behave like nothing — so every field the sim reads gets a real value
+ * here, from the template, rather than being left undefined.
+ */
+export function buildBoatProfile(input: BoatProfileInput): BoatProfile {
+  const template =
+    BOAT_CATALOG.find((boat) => boat.profileSlug === (input.templateSlug ?? DEFAULT_BOAT_SLUG)) ??
+    BOAT_CATALOG[0];
+
+  const summary =
+    input.summary ??
+    `${input.manufacturer} ${input.model} — handling modelled on the ${template.displayName}.`;
+
+  return {
+    ...template,
+    profileSlug: input.profileSlug,
+    displayName: input.displayName,
+    manufacturer: input.manufacturer,
+    model: input.model,
+    simStatus: input.simStatus,
+    summary,
+    description: summary,
+    homePort: input.homePort ?? template.homePort,
+    lengthM: input.lengthM ?? template.lengthM,
+    beamM: input.beamM ?? template.beamM,
+    stats: {
+      ...template.stats,
+      loa: input.loa,
+      beam: input.beam,
+    },
+  };
+}
+
+/** Every profile the app can offer: the shipped catalog plus seeded ones. */
+export function listBoatProfiles(): BoatProfile[] {
+  return [...BOAT_CATALOG, ...seededBoatProfiles()];
+}
+
+/** Strict lookup — returns undefined instead of falling back to the default. */
+export function findBoatProfile(slug: string): BoatProfile | undefined {
+  return (
+    BOAT_CATALOG.find((boat) => boat.profileSlug === slug) ?? findSeededBoatProfile(slug)
+  );
 }

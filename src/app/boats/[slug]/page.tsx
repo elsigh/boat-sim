@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { BOAT_CATALOG } from "@/lib/boats/catalog";
+import { BOAT_CATALOG, findBoatProfile } from "@/lib/boats/catalog";
 
 type BoatProfilePageProps = {
   params: Promise<{
@@ -15,7 +15,7 @@ export function generateStaticParams() {
 
 export default async function BoatProfilePage({ params }: BoatProfilePageProps) {
   const { slug } = await params;
-  const boat = BOAT_CATALOG.find((entry) => entry.profileSlug === slug);
+  const boat = findBoatProfile(slug);
 
   if (!boat) {
     notFound();

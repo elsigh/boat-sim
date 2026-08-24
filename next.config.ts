@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
   experimental: {
     useTypeScriptCli: true,
   },
+  // The Autonoma factory endpoint is a POST route handler, which a static
+  // export cannot represent (only GET is supported there). Naming its file
+  // route.node.ts and only recognising that extension off the export path
+  // mounts it for the server build and leaves it out of the Electron bundle.
+  pageExtensions: isStaticExport
+    ? ["tsx", "ts", "jsx", "js"]
+    : ["node.ts", "tsx", "ts", "jsx", "js"],
   ...(isStaticExport
     ? {
         output: "export" as const,
