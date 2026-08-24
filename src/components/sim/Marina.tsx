@@ -16,6 +16,8 @@ import {
   Vector3,
 } from "three";
 
+import { getWorldChart } from "@/lib/charts";
+import { sceneDocks } from "@/lib/marinas/scene";
 import type {
   Berth,
   DockFloat,
@@ -24,6 +26,8 @@ import type {
   TreeCluster,
   Vec2,
 } from "@/lib/marinas/types";
+
+import { ChartTerrain } from "./ChartTerrain";
 
 const CONTACT_FRICTION = 0.01;
 const CONTACT_RESTITUTION = 0;
@@ -341,11 +345,17 @@ function BerthMarker({
 }
 
 export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
+  const chart = useMemo(() => getWorldChart(layout.chartId ?? layout.id), [layout]);
+
+  const docks = useMemo(() => sceneDocks(layout), [layout]);
+
   return (
     <group>
+      {chart ? <ChartTerrain chart={chart} /> : null}
+
       {/* one static body carries every collider in the marina */}
       <RigidBody type="fixed" colliders={false}>
-        {layout.docks.map((dock) => (
+        {docks.map((dock) => (
           <CuboidCollider
             key={`collider-${dock.id}`}
             name={`dock:${dock.id}`}
@@ -372,7 +382,7 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
             />
           )),
         )}
-        {layout.land.map((land) => (
+        {(layout.land ?? []).map((land) => (
           <CuboidCollider
             key={`land-${land.id}`}
             name={`land:${land.id}`}
@@ -387,7 +397,7 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
         ))}
       </RigidBody>
 
-      {layout.land.map((land) => (
+      {(layout.land ?? []).map((land) => (
         <group
           key={`land-visual-${land.id}`}
           position={[land.position[0], 0, land.position[1]]}
@@ -405,12 +415,12 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
         </group>
       ))}
 
-      {layout.docks.map((dock) => (
+      {docks.map((dock) => (
         <DockVisual key={`dock-${dock.id}`} dock={dock} />
       ))}
 
       <InstancedPilings runs={layout.pilings} />
-      <InstancedCleats docks={layout.docks} />
+      <InstancedCleats docks={docks} />
       <InstancedTrees clusters={layout.trees ?? []} />
 
       {(layout.buoys ?? []).map((buoy, index) => (

@@ -1,12 +1,14 @@
 "use client";
 
 import type { ImpactIncident } from "@/lib/sim/collision-damage";
+import type { BoatProfile } from "@/lib/boats/catalog";
 
 import styles from "./DamageOverlay.module.css";
 
 type DamageOverlayProps = {
   hullIntegrityPct: number;
   incidents: ImpactIncident[];
+  selectedBoat?: BoatProfile;
 };
 
 function integrityColor(pct: number) {
@@ -35,9 +37,22 @@ const SEVERITY_TEXT: Record<ImpactIncident["severity"], string> = {
   severe: "text-red-400",
 };
 
-export function DamageOverlay({ hullIntegrityPct, incidents }: DamageOverlayProps) {
+function formatUsd(n: number) {
+  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+export function DamageOverlay({ hullIntegrityPct, incidents, selectedBoat }: DamageOverlayProps) {
   const latest = incidents[incidents.length - 1] ?? null;
   const breached = hullIntegrityPct <= 0;
+  const damagePct = Math.max(0, 100 - hullIntegrityPct);
+  const replacement = selectedBoat?.economics?.replacementValueUsd ?? null;
+  const estimatedCost =
+    replacement !== null
+      ? Math.min(
+          replacement * 0.4,
+          Math.round(Math.pow(damagePct / 100, 1.35) * 0.25 * replacement),
+        )
+      : null;
 
   return (
     <>
@@ -78,6 +93,12 @@ export function DamageOverlay({ hullIntegrityPct, incidents }: DamageOverlayProp
                 style={{ width: `${Math.max(0, hullIntegrityPct)}%` }}
               />
             </div>
+            {estimatedCost !== null ? (
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-[0.62rem] uppercase tracking-[0.24em] text-red-100/70">Est. repair</p>
+                <p className="font-mono text-[0.9rem] text-red-200">{formatUsd(estimatedCost)}</p>
+              </div>
+            ) : null}
 
             {breached ? (
               <p className="mt-2 text-xs font-semibold text-red-400">

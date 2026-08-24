@@ -1,3 +1,5 @@
+import { chartDepthMeters } from "@/lib/charts";
+import { sceneBounds, sceneChart, sceneDocks } from "@/lib/marinas/scene";
 import type { LandMass, MarinaLayout, Vec2 } from "@/lib/marinas/types";
 
 // Water-only navigation for the guidance line: a coarse occupancy grid per
@@ -5,7 +7,13 @@ import type { LandMass, MarinaLayout, Vec2 } from "@/lib/marinas/types";
 // clearance), A* across it, then line-of-sight smoothing so the path reads
 // like a route a skipper would steer, not a grid staircase.
 
-const CELL_M = 2.5;
+const MIN_CELL_M = 2.5;
+const MAX_CELL_M = 9;
+// A whole-island scene like Reid Harbor is 6 km across; keeping the grid under
+// this many cells is what stops the guidance A* from stalling the frame.
+const MAX_CELLS = 240_000;
+// Guidance keeps the boat in water it could actually float in.
+const MIN_NAV_DEPTH_M = 1.8;
 // Guidance clearance off structures. Deliberately a touch under the widest
 // half-beam so berth centers tucked between slip fingers stay reachable.
 const STRUCTURE_CLEARANCE_M = 2.0;
@@ -103,45 +111,44 @@ export function buildNavGrid(
   layout: MarinaLayout,
   mooredBoats: NavObstacleBoat[],
 ): NavGrid {
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let minZ = Number.POSITIVE_INFINITY;
-  let maxZ = Number.NEGATIVE_INFINITY;
+  const bounds = sceneBounds(layout, GRID_MARGIN_M);
+  const docks = sceneDocks(layout);
+  const chart = sceneChart(layout);
 
-  const extend = ([x, z]: Vec2, reach = 0) => {
-    minX = Math.min(minX, x - reach);
-    maxX = Math.max(maxX, x + reach);
-    minZ = Math.min(minZ, z - reach);
-    maxZ = Math.max(maxZ, z + reach);
-  };
-
-  layout.land.forEach((land) => extend(land.position, landExtent(land)));
-  layout.docks.forEach((dock) =>
-    extend(dock.position, Math.hypot(dock.size[0], dock.size[1]) * 0.5),
-  );
-  layout.berths.forEach((berth) => extend(berth.center));
-  layout.spawns.forEach((spawn) => extend(spawn.position));
-  Object.values(layout.approachLines ?? {}).forEach((line) =>
-    line.forEach((point) => extend(point)),
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxZ - bounds.minZ;
+  const cellM = Math.min(
+    MAX_CELL_M,
+    Math.max(MIN_CELL_M, Math.sqrt((width * height) / MAX_CELLS)),
   );
 
-  minX -= GRID_MARGIN_M;
-  maxX += GRID_MARGIN_M;
-  minZ -= GRID_MARGIN_M;
-  maxZ += GRID_MARGIN_M;
-
-  const cols = Math.max(8, Math.ceil((maxX - minX) / CELL_M));
-  const rows = Math.max(8, Math.ceil((maxZ - minZ) / CELL_M));
+  const cols = Math.max(8, Math.ceil(width / cellM));
+  const rows = Math.max(8, Math.ceil(height / cellM));
   const grid: NavGrid = {
-    originX: minX,
-    originZ: minZ,
+    originX: bounds.minX,
+    originZ: bounds.minZ,
     cols,
     rows,
-    cellM: CELL_M,
+    cellM,
     blocked: new Uint8Array(cols * rows),
   };
 
-  layout.docks.forEach((dock) => {
+  // Shoal water is an obstacle, not a suggestion.
+  if (chart) {
+    for (let row = 0; row < rows; row += 1) {
+      const z = bounds.minZ + (row + 0.5) * cellM;
+
+      for (let col = 0; col < cols; col += 1) {
+        const x = bounds.minX + (col + 0.5) * cellM;
+
+        if (chartDepthMeters(chart, x, z) < MIN_NAV_DEPTH_M) {
+          grid.blocked[row * cols + col] = 1;
+        }
+      }
+    }
+  }
+
+  docks.forEach((dock) => {
     blockRotatedRect(
       grid,
       dock.position,
@@ -152,7 +159,7 @@ export function buildNavGrid(
     );
   });
 
-  layout.land.forEach((land) => {
+  (layout.land ?? []).forEach((land) => {
     blockRotatedRect(
       grid,
       land.position,
@@ -352,6 +359,31 @@ const NEIGHBORS: Array<[number, number, number]> = [
  * first point is `from` and last point is `to`, or null when no route exists
  * (the caller should fall back to a straight line).
  */
+// A* over a quarter-million cells allocates ~2 MB of typed arrays per call.
+// Replanned as the boat drifts, that was the single biggest source of main
+// thread stalls and GC churn in the whole app — enough to starve pointer
+// events. The scratch buffers are allocated once and reused.
+const scratch = {
+  size: 0,
+  gScore: new Float32Array(0),
+  cameFrom: new Int32Array(0),
+  closed: new Uint8Array(0),
+};
+
+function scratchFor(size: number) {
+  if (scratch.size < size) {
+    scratch.size = size;
+    scratch.gScore = new Float32Array(size);
+    scratch.cameFrom = new Int32Array(size);
+    scratch.closed = new Uint8Array(size);
+  }
+
+  scratch.gScore.fill(Number.POSITIVE_INFINITY, 0, size);
+  scratch.cameFrom.fill(-1, 0, size);
+  scratch.closed.fill(0, 0, size);
+  return scratch;
+}
+
 export function findWaterPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] | null {
   const startCell = nearestFreeCell(grid, toCell(grid, from));
   const goalCell = nearestFreeCell(grid, toCell(grid, to));
@@ -360,12 +392,16 @@ export function findWaterPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] | nul
     return null;
   }
 
+  // Out in open water the answer is a straight line, which is both the common
+  // case and the one where a whole-scene A* is most expensive. Check first.
+  if (gridLineOfSight(grid, from, to)) {
+    return [from, to];
+  }
+
   const startIndex = cellIndex(grid, startCell[0], startCell[1]);
   const goalIndex = cellIndex(grid, goalCell[0], goalCell[1]);
 
-  const gScore = new Float32Array(grid.cols * grid.rows).fill(Number.POSITIVE_INFINITY);
-  const cameFrom = new Int32Array(grid.cols * grid.rows).fill(-1);
-  const closed = new Uint8Array(grid.cols * grid.rows);
+  const { gScore, cameFrom, closed } = scratchFor(grid.cols * grid.rows);
   const heap = new MinHeap();
 
   const heuristic = (index: number) => {

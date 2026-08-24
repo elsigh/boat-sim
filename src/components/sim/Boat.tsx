@@ -31,6 +31,13 @@ type BoatProps = {
   controls: GamepadSnapshot;
   engineState: TwinEngineState;
   environment: SimulationEnvironment;
+  anchorConfig?: {
+    active: boolean;
+    point: { x: number; z: number };
+    chainMeters: number;
+    stiffness: number; // N per meter beyond slack
+    damping: number; // N per m/s along the rode
+  } | null;
   hullDamageMarks: ImpactIncident[];
   initialPose: {
     position: [number, number, number];
@@ -97,6 +104,7 @@ export function Boat({
   controls,
   engineState,
   environment,
+  anchorConfig,
   hullDamageMarks,
   initialPose,
   onImpact,
@@ -240,6 +248,27 @@ export function Boat({
 
     if (result.yawTorque.lengthSq() > 0.0001) {
       body.addTorque(result.yawTorque, true);
+    }
+    // Anchor spring: acts only when the rode is taut; gentle damping along the rode.
+    if (anchorConfig?.active && anchorConfig.chainMeters > 1) {
+      const ax = anchorConfig.point.x;
+      const az = anchorConfig.point.z;
+      const dx = worldPosition.x - ax;
+      const dz = worldPosition.z - az;
+      const dist = Math.hypot(dx, dz);
+      const slack = anchorConfig.chainMeters * 0.98; // small slack before loading
+      if (dist > slack) {
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const stretch = dist - slack;
+        const springN = anchorConfig.stiffness * stretch;
+        // Damping along the rode direction
+        const alongVel = worldVelocity.x * nx + worldVelocity.z * nz;
+        const dampN = anchorConfig.damping * alongVel;
+        const fx = -(springN + dampN) * nx;
+        const fz = -(springN + dampN) * nz;
+        body.addForce({ x: fx, y: 0, z: fz }, true);
+      }
     }
 
     telemetryRef.current(result.telemetry);

@@ -3,17 +3,18 @@
 import { type RapierRigidBody } from "@react-three/rapier";
 import { useFrame, useThree } from "@react-three/fiber";
 import { type MutableRefObject, useEffect, useRef } from "react";
-import { Quaternion, Vector3 } from "three";
+import { type Object3D, Quaternion, Vector3 } from "three";
 
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
 
 type SimCameraRigProps = {
   boatLengthM: number;
   bodyRef: MutableRefObject<RapierRigidBody | null>;
+  tenderBodyRef?: MutableRefObject<Object3D | null>;
   pitchOffset: number;
   planZoom: number;
   turboCinematic: boolean;
-  viewMode: "plan" | "forward";
+  viewMode: "plan" | "forward" | "backward" | "tender";
   yawOffset: number;
 };
 
@@ -28,6 +29,7 @@ const lookTarget = new Vector3();
 export function SimCameraRig({
   boatLengthM,
   bodyRef,
+  tenderBodyRef,
   pitchOffset,
   planZoom,
   turboCinematic,
@@ -42,17 +44,22 @@ export function SimCameraRig({
   }, [camera]);
 
   useFrame((_, delta) => {
-    const body = liveRigidBody(bodyRef);
+    const body = viewMode === "tender" && tenderBodyRef?.current ? null : liveRigidBody(bodyRef);
 
-    if (!body) {
-      return;
+    if (viewMode === "tender" && tenderBodyRef?.current) {
+      // Follow tender object directly
+      const tender = tenderBodyRef.current;
+      const tenderPos = tender.position;
+      const tenderYaw = tender.rotation.y;
+      boatPosition.set(tenderPos.x, 0.9, tenderPos.z);
+      boatQuaternion.set(0, Math.sin(tenderYaw * 0.5), 0, Math.cos(tenderYaw * 0.5));
+    } else {
+      if (!body) return;
+      const translation = body.translation();
+      const rotation = body.rotation();
+      boatPosition.set(translation.x, translation.y, translation.z);
+      boatQuaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
     }
-
-    const translation = body.translation();
-    const rotation = body.rotation();
-
-    boatPosition.set(translation.x, translation.y, translation.z);
-    boatQuaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
 
     forwardVector.set(0, 0, 1).applyQuaternion(boatQuaternion).normalize();
     rightVector.set(1, 0, 0).applyQuaternion(boatQuaternion).normalize();
@@ -83,7 +90,7 @@ export function SimCameraRig({
         boatPosition.z + Math.cos(orbitHeading) * horizontalRadius,
       );
       desiredTarget.copy(boatPosition).addScaledVector(forwardVector, 1.5);
-    } else {
+    } else if (viewMode === "forward") {
       const orbitHeading = heading + Math.PI + yawOffset;
       const polar = Math.min(1.42, Math.max(0.98, 1.16 + pitchOffset));
       const distance = Math.max(18.5, boatLengthM * 1.08);
@@ -98,6 +105,36 @@ export function SimCameraRig({
       desiredPosition
         .addScaledVector(rightVector, 0.45);
       desiredTarget.copy(boatPosition).addScaledVector(forwardVector, 18).add(new Vector3(0, 1.8, 0));
+    } else if (viewMode === "backward") {
+      // Camera ahead of the bow looking aft to see wake/astern traffic.
+      const orbitHeading = heading + 0 + yawOffset;
+      const polar = Math.min(1.42, Math.max(0.98, 1.16 + pitchOffset));
+      const distance = Math.max(18.5, boatLengthM * 1.08);
+      const horizontalRadius = Math.sin(polar) * distance;
+      const verticalOffset = Math.cos(polar) * distance;
+
+      desiredPosition.set(
+        boatPosition.x + Math.sin(orbitHeading) * horizontalRadius,
+        boatPosition.y + verticalOffset + 0.8,
+        boatPosition.z + Math.cos(orbitHeading) * horizontalRadius,
+      );
+      desiredPosition.addScaledVector(rightVector, -0.45);
+      // Look back toward the stern
+      desiredTarget.copy(boatPosition).addScaledVector(forwardVector, -18).add(new Vector3(0, 1.8, 0));
+    } else {
+      // Tender follow camera: closer, lower, off to a side slightly
+      const orbitHeading = heading + Math.PI + yawOffset;
+      const polar = 1.02;
+      const distance = 8.5;
+      const horizontalRadius = Math.sin(polar) * distance;
+      const verticalOffset = Math.cos(polar) * distance;
+      desiredPosition.set(
+        boatPosition.x + Math.sin(orbitHeading) * horizontalRadius,
+        boatPosition.y + verticalOffset + 0.4,
+        boatPosition.z + Math.cos(orbitHeading) * horizontalRadius,
+      );
+      desiredPosition.addScaledVector(rightVector, 0.25);
+      desiredTarget.copy(boatPosition).add(new Vector3(0, 0.8, 0));
     }
 
     if (!initializedRef.current) {

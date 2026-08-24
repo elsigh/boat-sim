@@ -22,7 +22,7 @@ function mirrorVec([x, z]: Vec2): Vec2 {
 function mirrorLayout(layout: MarinaLayout): MarinaLayout {
   return {
     ...layout,
-    land: layout.land.map((land) => ({
+    land: layout.land?.map((land) => ({
       ...land,
       position: mirrorVec(land.position),
       rotationDeg: -(land.rotationDeg ?? 0),

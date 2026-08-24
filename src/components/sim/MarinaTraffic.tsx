@@ -9,6 +9,7 @@ import {
 } from "@react-three/rapier";
 import {
   type MutableRefObject,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -16,9 +17,12 @@ import {
 } from "react";
 import { CatmullRomCurve3, Vector3 } from "three";
 
-import type { DockFloat, MarinaLayout } from "@/lib/marinas/types";
+import { sceneDocks } from "@/lib/marinas/scene";
+import type { DockFloat, MarinaLayout, Vec2 } from "@/lib/marinas/types";
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
+import { buildNavGrid, findWaterPath } from "@/lib/sim/water-nav";
 
+import { deriveMoorings } from "./MooredBoats";
 import {
   SMALL_CRAFT_ACCENT_COLORS,
   SMALL_CRAFT_HULL_COLORS,
@@ -26,21 +30,56 @@ import {
   type SmallCraftSpec,
 } from "./SmallCraft";
 
-// Traffic keeps to the fairway: runs stop at this fraction of the approach
-// line so an inbound skipper never parks in the player's target berth.
+// Other boats going about their business. Their fairways aren't authored — they
+// come from the same water-only A* that draws the guidance line, run from each
+// arrival spawn to its berth, which is by definition the way in.
+//
+// Each boat also reports its position so the plotter can show it as an AIS
+// target.
+
 const FAIRWAY_END_U = 0.8;
 const CRUISE_SPEED_MPS = 1.7; // a polite ~3.3 kt inside the breakwater
 const TURN_RATE_RAD_PER_S = 0.75;
-const FIRST_RUN_DELAY_MS = [12_000, 25_000] as const;
-const NEXT_RUN_DELAY_MS = [45_000, 110_000] as const;
-// Never materialize a boat near the player — retry shortly instead.
+const FIRST_RUN_DELAY_MS = [6_000, 16_000] as const;
+const NEXT_RUN_DELAY_MS = [20_000, 55_000] as const;
 const SPAWN_CLEARANCE_M = 60;
 const BLOCKED_RETRY_DELAY_MS = [8_000, 15_000] as const;
-// Traffic hull half-beam plus a fender's worth of margin when validating the
-// route against dock footprints; the turn-around point needs swing room.
 const PATH_DOCK_MARGIN_M = 2.8;
 const TURN_POINT_MARGIN_M = 9;
 const PATH_SAMPLES = 48;
+/** How many boats can be under way at once. */
+const MAX_CONCURRENT_RUNS = 3;
+/** AIS targets refresh at a plotter-ish rate, not at frame rate. */
+const AIS_PUBLISH_MS = 400;
+
+const MPS_TO_KNOTS = 1.94384;
+
+const VESSEL_NAMES = [
+  "Kestrel",
+  "Salish Rose",
+  "Osprey",
+  "Nootka",
+  "Gray Wolf",
+  "Cormorant",
+  "Second Wind",
+  "Rainshadow",
+  "Tillikum",
+  "Halcyon",
+  "Sea Otter",
+  "Chinook",
+];
+
+/** One vessel as it appears on the plotter's target list. */
+export type TrafficTarget = {
+  id: number;
+  name: string;
+  x: number;
+  z: number;
+  /** Course over ground, degrees true in the render world frame. */
+  headingDeg: number;
+  sogKnots: number;
+  lengthM: number;
+};
 
 function pointNearDock(x: number, z: number, dock: DockFloat, margin: number) {
   const rotation = ((dock.rotationDeg ?? 0) * Math.PI) / 180;
@@ -80,6 +119,7 @@ type TrafficRun = {
   mode: "visit" | "depart";
   pauseMs: number;
   spec: SmallCraftSpec;
+  name: string;
 };
 
 type TrafficPhase = "in" | "pause" | "out";
@@ -106,7 +146,20 @@ function randomSpec(): SmallCraftSpec {
   };
 }
 
-function TrafficBoat({ run, onDone }: { run: TrafficRun; onDone: () => void }) {
+type TrafficReport = (
+  id: number,
+  target: Omit<TrafficTarget, "id"> | null,
+) => void;
+
+function TrafficBoat({
+  run,
+  onDone,
+  onReport,
+}: {
+  run: TrafficRun;
+  onDone: () => void;
+  onReport: TrafficReport;
+}) {
   const bodyRef = useRef<RapierRigidBody | null>(null);
   const progressRef = useRef({
     phase: (run.mode === "depart" ? "out" : "in") as TrafficPhase,
@@ -119,6 +172,8 @@ function TrafficBoat({ run, onDone }: { run: TrafficRun; onDone: () => void }) {
   const curveLength = useMemo(() => run.curve.getLength(), [run.curve]);
   const point = useMemo(() => new Vector3(), []);
   const tangent = useMemo(() => new Vector3(), []);
+
+  useEffect(() => () => onReport(run.id, null), [onReport, run.id]);
 
   useFrame((_, delta) => {
     const body = bodyRef.current;
@@ -147,6 +202,7 @@ function TrafficBoat({ run, onDone }: { run: TrafficRun; onDone: () => void }) {
 
       if (progress.u <= 0) {
         progress.done = true;
+        onReport(run.id, null);
         onDone();
         return;
       }
@@ -180,6 +236,15 @@ function TrafficBoat({ run, onDone }: { run: TrafficRun; onDone: () => void }) {
       z: 0,
       w: Math.cos(halfYaw),
     });
+
+    onReport(run.id, {
+      name: run.name,
+      x: point.x,
+      z: point.z,
+      headingDeg: ((((progress.yaw * 180) / Math.PI) % 360) + 360) % 360,
+      sogKnots: progress.phase === "pause" ? 0 : CRUISE_SPEED_MPS * MPS_TO_KNOTS,
+      lengthM: run.spec.lengthM,
+    });
   });
 
   const start = useMemo(() => {
@@ -211,51 +276,116 @@ function TrafficBoat({ run, onDone }: { run: TrafficRun; onDone: () => void }) {
 export function MarinaTraffic({
   layout,
   playerBodyRef,
+  onTraffic,
 }: {
   layout: MarinaLayout;
   playerBodyRef: MutableRefObject<RapierRigidBody | null>;
+  onTraffic?: (targets: TrafficTarget[]) => void;
 }) {
-  const [run, setRun] = useState<TrafficRun | null>(null);
+  const [runs, setRuns] = useState<TrafficRun[]>([]);
   const [retryNonce, setRetryNonce] = useState(0);
   const runIdRef = useRef(0);
   const hadRunRef = useRef(false);
   const blockedRef = useRef(false);
 
+  // Fairways come from the water-only path finder: spawn point to berth is the
+  // route a real boat would take in, reefs and docks already accounted for.
   const curves = useMemo(() => {
-    const lines = Object.values(layout.approachLines ?? {}).filter(
-      (points) => points.length >= 3,
+    const grid = buildNavGrid(
+      layout,
+      deriveMoorings(layout).map((mooring) => ({
+        position: mooring.position,
+        headingDeg: mooring.headingDeg,
+        lengthM: mooring.spec.lengthM,
+        beamM: mooring.spec.beamM,
+      })),
     );
+    const docks = sceneDocks(layout);
+    const seen = new Set<string>();
+    const out: CatmullRomCurve3[] = [];
 
-    // A curve that clips a dock (or ends without room to turn) is simply not
-    // a traffic route; better no boat than one gliding through the timber.
-    const usable = lines
-      .map(
-        (points) =>
-          new CatmullRomCurve3(
-            points.map(([x, z]) => new Vector3(x, 0, z)),
-            false,
-            "centripetal",
-          ),
-      )
-      .filter((curve) => curveAvoidsDocks(curve, layout.docks));
+    for (const spawn of layout.spawns) {
+      if (spawn.kind !== "arrival") {
+        continue;
+      }
 
-    if (usable.length < lines.length) {
-      console.warn(
-        `[marina-traffic] ${layout.id}: ${lines.length - usable.length} of ${lines.length} approach lines clip a dock and won't carry traffic`,
+      const berth = layout.berths.find((entry) => entry.id === spawn.berthId);
+
+      if (!berth) {
+        continue;
+      }
+
+      const key = `${spawn.position.join()}->${berth.center.join()}`;
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+
+      const path: Vec2[] | null = findWaterPath(grid, spawn.position, berth.center);
+
+      if (!path || path.length < 2) {
+        continue;
+      }
+
+      // CatmullRom wants three points to bend through.
+      const points =
+        path.length >= 3
+          ? path
+          : [
+              path[0],
+              [(path[0][0] + path[1][0]) / 2, (path[0][1] + path[1][1]) / 2] as Vec2,
+              path[1],
+            ];
+
+      const curve = new CatmullRomCurve3(
+        points.map(([x, z]) => new Vector3(x, 0, z)),
+        false,
+        "centripetal",
       );
+
+      if (curve.getLength() > 80 && curveAvoidsDocks(curve, docks)) {
+        out.push(curve);
+      }
     }
 
-    return usable;
+    return out;
   }, [layout]);
 
+  // Live target positions, written every frame but published on a timer.
+  const targetsRef = useRef(new Map<number, TrafficTarget>());
+
+  const report = useCallback<TrafficReport>((id, target) => {
+    if (target === null) {
+      targetsRef.current.delete(id);
+      return;
+    }
+
+    targetsRef.current.set(id, { id, ...target });
+  }, []);
+
   useEffect(() => {
-    // New marina: clear any boat mid-run from the previous scene.
+    if (!onTraffic) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      onTraffic(Array.from(targetsRef.current.values()));
+    }, AIS_PUBLISH_MS);
+
+    return () => window.clearInterval(timer);
+  }, [onTraffic]);
+
+  useEffect(() => {
+    // New marina: clear anything mid-run from the previous scene.
     hadRunRef.current = false;
-    setRun(null);
+    targetsRef.current.clear();
+    setRuns([]);
   }, [layout]);
 
   useEffect(() => {
-    if (run || curves.length === 0) {
+    if (runs.length >= MAX_CONCURRENT_RUNS || curves.length === 0) {
       return;
     }
 
@@ -277,8 +407,7 @@ export function MarinaTraffic({
           start.z - translation.z,
         );
 
-        // Too close to the player — hold off and try again shortly rather
-        // than spawn a boat in their lap.
+        // Too close to the player — hold off rather than spawn a boat in their lap.
         if (clearance < SPAWN_CLEARANCE_M) {
           blockedRef.current = true;
           setRetryNonce((value) => value + 1);
@@ -288,21 +417,35 @@ export function MarinaTraffic({
 
       runIdRef.current += 1;
       hadRunRef.current = true;
-      setRun({
-        id: runIdRef.current,
-        curve,
-        mode,
-        pauseMs: 3000 + Math.random() * 4000,
-        spec: randomSpec(),
-      });
+      const id = runIdRef.current;
+      setRuns((current) => [
+        ...current,
+        {
+          id,
+          curve,
+          mode,
+          pauseMs: 3000 + Math.random() * 4000,
+          spec: randomSpec(),
+          name: VESSEL_NAMES[id % VESSEL_NAMES.length],
+        },
+      ]);
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [run, curves, retryNonce, playerBodyRef]);
+  }, [runs.length, curves, retryNonce, playerBodyRef]);
 
-  if (!run) {
-    return null;
-  }
-
-  return <TrafficBoat key={run.id} run={run} onDone={() => setRun(null)} />;
+  return (
+    <>
+      {runs.map((run) => (
+        <TrafficBoat
+          key={run.id}
+          run={run}
+          onReport={report}
+          onDone={() =>
+            setRuns((current) => current.filter((entry) => entry.id !== run.id))
+          }
+        />
+      ))}
+    </>
+  );
 }

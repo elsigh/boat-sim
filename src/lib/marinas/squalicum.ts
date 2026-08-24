@@ -1,69 +1,17 @@
-import { offset, pilingsAlong, walkwayWithFingers } from "./builders";
 import type { MarinaLayout, Vec2 } from "./types";
 
-// Squalicum Harbor, Outer Basin, Gate 3 — NW Explorations' charter base.
-// Geometry follows OpenStreetMap float outlines and the Port of Bellingham
-// marina map: guest/NWE side-tie floats bear 125°/305° true, the departure
-// channel runs 035°/215° to the South Entrance, and a rock breakwater closes
-// the southwest side. Local frame: origin near the Gate 3 basin, +z north.
+// Squalicum Harbor, Bellingham — NW Explorations' charter base.
+//
+// Coordinates are chart-frame metres about 48.7535 N, 122.5060 W. The
+// shoreline, the dredged basins and every finger float come from the
+// generated chart (NOAA DEM + OSM), so what lives here is the exercise: which
+// float you're tying to, where you start, and what the wind does to you on the
+// way in.
 
-const VISITOR_FLOAT_CENTER: Vec2 = [96, 209];
-const FLOAT_BEARING = 125;
-
-const nweBerthCenter = offset(VISITOR_FLOAT_CENTER, 35, 4.3);
-
-const dockA = walkwayWithFingers({
-  id: "dock-a",
-  center: offset(VISITOR_FLOAT_CENTER, 215, 38),
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 72,
-  fingerLengthM: 12.2,
-  sides: ["left", "right"],
-});
-const dockB = walkwayWithFingers({
-  id: "dock-b",
-  center: offset(VISITOR_FLOAT_CENTER, 215, 78),
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 72,
-  fingerLengthM: 12.2,
-  sides: ["left", "right"],
-});
-const dockC = walkwayWithFingers({
-  id: "dock-c",
-  center: offset(VISITOR_FLOAT_CENTER, 215, 120),
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 79,
-  fingerLengthM: 15.5,
-  sides: ["left", "right"],
-});
-const dockD = walkwayWithFingers({
-  id: "dock-d",
-  center: offset(VISITOR_FLOAT_CENTER, 215, 165),
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 84,
-  fingerLengthM: 15.5,
-  sides: ["left", "right"],
-});
-const eastDock1 = walkwayWithFingers({
-  id: "east-dock-1",
-  center: [125, -10],
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 80,
-  fingerLengthM: 17.5,
-  fingerSpacingM: 11,
-  sides: ["left", "right"],
-});
-const eastDock2 = walkwayWithFingers({
-  id: "east-dock-2",
-  center: [85, -75],
-  bearingDeg: FLOAT_BEARING,
-  lengthM: 80,
-  fingerLengthM: 17.5,
-  fingerSpacingM: 11,
-  sides: ["left", "right"],
-});
-
-const slipBerthCenter = offset(offset([125, -10], FLOAT_BEARING, 20), 215, 9);
+const NWE_FLOAT: Vec2 = [32, 437];
+const NWE_BERTH: Vec2 = [34, 440];
+const FUEL_BERTH: Vec2 = [-273, 167];
+const PUMPOUT_BERTH: Vec2 = [-264, 208];
 
 export const SQUALICUM_HARBOR: MarinaLayout = {
   id: "bellingham-marina",
@@ -71,158 +19,132 @@ export const SQUALICUM_HARBOR: MarinaLayout = {
   vhfChannel: "16 / harbor office",
   briefing: [
     "Bonum Vitae side-ties on the Gate 3 visitor float, directly below the NW Explorations office.",
-    "Departure: back clear, swing the bow to ~215T, and run the channel between the boathouses and the east-basin docks.",
-    "South Entrance is a ~47 m gap at the breakwater's SE tip — FL G '3' to starboard on the way out.",
-    "Summer mornings are calm; the S-SW sea breeze fills to 10-15 kt by afternoon.",
-  ],
-  land: [
-    {
-      id: "ne-shore",
-      position: [150.5, 286.8],
-      size: [120, 300],
-      rotationDeg: FLOAT_BEARING,
-      heightM: 3,
-      color: "#5c6350",
-    },
-    {
-      id: "east-shore",
-      position: [219, 71],
-      size: [100, 280],
-      rotationDeg: 36,
-      heightM: 3,
-      color: "#5f6652",
-    },
-    {
-      id: "boathouse-row",
-      position: [-15, 40],
-      size: [26, 170],
-      rotationDeg: 35,
-      heightM: 4.5,
-      color: "#8a8072",
-    },
-    {
-      id: "breakwater",
-      position: [-228, -28],
-      size: [14, 390],
-      rotationDeg: 312,
-      heightM: 2.2,
-      color: "#71716a",
-    },
-    {
-      id: "south-spit",
-      position: [85, -192],
-      size: [24, 280],
-      rotationDeg: 90,
-      heightM: 1.8,
-      color: "#767263",
-    },
-  ],
-  trees: [
-    { center: [160, 305], radiusM: 45, count: 28 },
-    { center: [240, 110], radiusM: 32, count: 16 },
+    "In from Bellingham Bay: leave the breakwater to port and run the entrance channel on about 035T.",
+    "Inside the basin the fairways are narrow — idle speed, and remember the boat carries way.",
+    "Summer mornings are calm; the S-SW sea breeze fills to 10-15 kt by afternoon and sets you onto the float.",
   ],
   docks: [
+    // The NWE visitor float sits inboard of the mapped reciprocal float and
+    // isn't in OSM, so it's authored here.
     {
-      id: "visitor-float",
-      position: VISITOR_FLOAT_CENTER,
-      size: [3, 85],
-      rotationDeg: FLOAT_BEARING,
+      id: "nwe-visitor-float",
+      position: NWE_FLOAT,
+      size: [3, 82],
+      rotationDeg: 125,
       color: "#b3a189",
     },
-    {
-      id: "reciprocal-float",
-      position: [107.5, 225.4],
-      size: [2.4, 73],
-      rotationDeg: FLOAT_BEARING,
-    },
-    {
-      id: "sawtooth-pier",
-      position: [154, 118],
-      size: [16, 120],
-      rotationDeg: 36,
-      kind: "pier",
-      color: "#7d7264",
-    },
-    ...dockA.docks,
-    ...dockB.docks,
-    ...dockC.docks,
-    ...dockD.docks,
-    ...eastDock1.docks,
-    ...eastDock2.docks,
   ],
   pilings: [
-    // Pilings hug the float's SW face so the NE berth face stays clear.
-    pilingsAlong({
-      id: "visitor-pilings",
-      center: VISITOR_FLOAT_CENTER,
-      bearingDeg: FLOAT_BEARING,
-      lengthM: 80,
-      offsetM: 1.7,
+    {
+      id: "nwe-pilings",
+      from: [-1, 415],
+      to: [65, 459],
       count: 6,
-    }),
-    pilingsAlong({
-      id: "sawtooth-pilings-w",
-      center: [154, 118],
-      bearingDeg: 36,
-      lengthM: 114,
-      offsetM: -8.6,
-      count: 8,
-    }),
-    ...dockA.pilings,
-    ...dockB.pilings,
-    ...dockC.pilings,
-    ...dockD.pilings,
-    ...eastDock1.pilings,
-    ...eastDock2.pilings,
+      radiusM: 0.24,
+    },
   ],
   berths: [
     {
       id: "nwe-side-tie",
       label: "NWE visitor float · side-tie",
       kind: "alongside",
-      center: nweBerthCenter,
+      center: NWE_BERTH,
       headingDeg: 305,
       lengthM: 17,
       widthM: 5.2,
       dockSide: "port",
-      notes: "Port-side-to on the Gate 3 visitor float, below the NWE office.",
+      notes: "Port-side-to below the NWE office. The afternoon breeze sets you on — use it.",
     },
     {
       id: "east-slip",
-      label: "East basin · 56' slip",
+      label: "Inner basin · 56' slip",
       kind: "slip",
-      center: slipBerthCenter,
+      center: [72, 199],
       headingDeg: 35,
       lengthM: 17.5,
       widthM: 5.4,
       dockSide: "starboard",
-      notes: "Bow-in between fingers off the east-basin walkway.",
+      notes: "Bow-in between fingers. Set up early; there's no room to correct once you're committed.",
+    },
+    {
+      id: "fuel-dock",
+      label: "Fuel dock · side-tie",
+      kind: "alongside",
+      center: FUEL_BERTH,
+      headingDeg: 195,
+      lengthM: 20,
+      widthM: 6,
+      dockSide: "starboard",
+      notes: "Queue outside if it's occupied; mind the set onto the face.",
+    },
+    {
+      id: "pumpout-side",
+      label: "Pumpout · side-tie",
+      kind: "alongside",
+      center: PUMPOUT_BERTH,
+      headingDeg: 215,
+      lengthM: 16,
+      widthM: 6,
+      dockSide: "port",
+      notes: "Slow approach — crosswind pushes you into the face.",
     },
   ],
   spawns: [
     {
-      id: "depart-nwe",
-      label: "Depart NWE side-tie",
-      kind: "departure",
-      position: nweBerthCenter,
-      yawDeg: 305,
+      id: "arrive-nwe-bay",
+      label: "Bellingham Bay → Gate 3 side-tie",
+      kind: "arrival",
+      position: [-880, -680],
+      yawDeg: 35,
       berthId: "nwe-side-tie",
+      range: "passage",
+      brief: "A mile out in the bay. Find the entrance, run the channel, then work up the fairway.",
     },
     {
       id: "arrive-nwe",
-      label: "Arrive from the bay → side-tie",
+      label: "Off the breakwater → Gate 3 side-tie",
       kind: "arrival",
-      position: [-40, -130],
-      yawDeg: 32,
+      position: [-380, -80],
+      yawDeg: 35,
       berthId: "nwe-side-tie",
+      range: "approach",
+      brief: "Just outside the entrance — straight into the fairway work.",
+    },
+    {
+      id: "depart-nwe",
+      label: "Depart Gate 3 side-tie",
+      kind: "departure",
+      position: NWE_BERTH,
+      yawDeg: 305,
+      berthId: "nwe-side-tie",
+      range: "close",
     },
     {
       id: "arrive-east-slip",
-      label: "Arrive → east basin slip",
+      label: "Inner basin → 56' slip",
       kind: "arrival",
-      position: [-20, -130],
+      position: [-200, 60],
       yawDeg: 35,
       berthId: "east-slip",
+      range: "approach",
+    },
+    {
+      id: "arrive-fuel",
+      label: "Arrive → fuel dock",
+      kind: "arrival",
+      position: [-420, 20],
+      yawDeg: 20,
+      berthId: "fuel-dock",
+      range: "approach",
+    },
+    {
+      id: "arrive-pumpout",
+      label: "Arrive → pumpout",
+      kind: "arrival",
+      position: [-380, 60],
+      yawDeg: 35,
+      berthId: "pumpout-side",
+      range: "approach",
     },
   ],
   conditions: {
@@ -230,28 +152,7 @@ export const SQUALICUM_HARBOR: MarinaLayout = {
     windTowardDeg: 30,
     currentKnots: 0.3,
     currentTowardDeg: 340,
-    summary: "SW sea breeze 12 kt (typical summer afternoon); negligible current inside.",
+    summary: "SW sea breeze 12 kt — a typical summer afternoon. Negligible current inside.",
   },
-  approachLines: {
-    // The berth is on the float's NE face: round the SE tip with ~9 m of
-    // clearance, then run NW up the fairway and close at a shallow angle.
-    // Never route across the float itself.
-    "nwe-side-tie": [
-      [-40, -130],
-      [0, -70],
-      [50, 20],
-      [95, 120],
-      [138, 172],
-      [141, 196],
-      [120, 206],
-      [104, 211.5],
-      [98.5, 212.5],
-    ],
-    "east-slip": [
-      [-20, -130],
-      [40, -85],
-      [95, -52],
-      [136.2, -28.9],
-    ],
-  },
+  approachLines: {},
 };

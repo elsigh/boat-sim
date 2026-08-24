@@ -14,8 +14,8 @@ import {
 
 import type { BoatProfile } from "@/lib/boats/catalog";
 
-// Parametric Grand Banks-style topsides. Everything is driven by hull length
-// and beam so the second boat profile still renders sensibly. Local frame:
+// Parametric topsides by hull profile family (trawler, express, flybridge, superyacht).
+// Everything is driven by hull length and beam, with per-family geometry tweaks. Local frame:
 // +z bow, +y up, deck plate top at DECK_Y.
 
 // The hull extrusion's top bevel lands near y=0.52, so the deck sits on it.
@@ -172,7 +172,7 @@ function useStanchionPositions(beamM: number, lengthM: number, scale: number) {
   }, [beamM, lengthM, scale]);
 }
 
-function GrandBanksTopsides({ boat }: { boat: BoatProfile }) {
+function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
   const L = boat.lengthM;
   const B = boat.beamM;
 
@@ -385,6 +385,146 @@ function GrandBanksTopsides({ boat }: { boat: BoatProfile }) {
   );
 }
 
+function ExpressTopsides({ boat }: { boat: BoatProfile }) {
+  const L = boat.lengthM;
+  const B = boat.beamM;
+
+  // Lower, sleeker house; longer foredeck; minimal arch; no flybridge bench.
+  const coachGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.32,
+        bowHalfWidth: B * 0.22,
+        height: 0.52,
+        length: L * 0.28,
+      }),
+    [B, L],
+  );
+  const windscreenZ = -L * 0.04;
+  const hardtopGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.34,
+        bowHalfWidth: B * 0.28,
+        height: 0.12,
+        length: L * 0.32,
+      }),
+    [B, L],
+  );
+  return (
+    <group>
+      {/* low coachroof */}
+      <mesh castShadow receiveShadow geometry={coachGeometry} position={[0, DECK_Y + 0.28, -L * 0.04]}>
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
+      </mesh>
+      {/* wrap windscreen */}
+      <mesh position={[0, DECK_Y + 0.48, windscreenZ]} rotation={[-0.22, 0, 0]}>
+        <boxGeometry args={[B * 0.62, 0.28, 0.04]} />
+        <meshStandardMaterial color={new Color(COLORS.glass)} metalness={0.5} roughness={0.12} />
+      </mesh>
+      {/* hardtop */}
+      <mesh castShadow receiveShadow geometry={hardtopGeometry} position={[0, DECK_Y + 0.62, -L * 0.10]}>
+        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.5} />
+      </mesh>
+      {/* radar mast stub */}
+      <mesh castShadow position={[0, DECK_Y + 0.86, -L * 0.14]}>
+        <boxGeometry args={[B * 0.18, 0.08, 0.16]} />
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+function FlybridgeTopsides({ boat }: { boat: BoatProfile }) {
+  // Similar to trawler, but broader upper volumes and more forward flybridge.
+  const L = boat.lengthM;
+  const B = boat.beamM;
+  const salonGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.38,
+        bowHalfWidth: B * 0.32,
+        height: HOUSE_TOP_Y - DECK_Y + 0.06,
+        length: L * 0.40,
+      }),
+    [B, L],
+  );
+  const roofGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.40,
+        bowHalfWidth: B * 0.34,
+        height: ROOF_TOP_Y - HOUSE_TOP_Y + 0.06,
+        length: L * 0.60,
+      }),
+    [B, L],
+  );
+  return (
+    <group>
+      <mesh castShadow receiveShadow geometry={salonGeometry} position={[0, DECK_Y, -L * 0.11]}>
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
+      </mesh>
+      <mesh castShadow receiveShadow geometry={roofGeometry} position={[0, HOUSE_TOP_Y + 0.02, -L * 0.16]}>
+        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.5} />
+      </mesh>
+      {/* larger flybridge coaming */}
+      <mesh castShadow position={[0, ROOF_TOP_Y + 0.46, -L * 0.18]}>
+        <boxGeometry args={[B * 0.54, 0.42, 0.7]} />
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.55} />
+      </mesh>
+      {/* wrap windshield */}
+      <mesh position={[0, ROOF_TOP_Y + 0.78, -L * 0.12]} rotation={[-0.28, 0, 0]}>
+        <boxGeometry args={[B * 0.54, 0.34, 0.04]} />
+        <meshStandardMaterial color={new Color(COLORS.glass)} metalness={0.45} roughness={0.12} />
+      </mesh>
+    </group>
+  );
+}
+
+function SuperyachtTopsides({ boat }: { boat: BoatProfile }) {
+  const L = boat.lengthM;
+  const B = boat.beamM;
+  // Chunkier house volumes, taller boat deck, bigger mast.
+  const houseGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.40,
+        bowHalfWidth: B * 0.35,
+        height: HOUSE_TOP_Y - DECK_Y + 0.18,
+        length: L * 0.48,
+      }),
+    [B, L],
+  );
+  const boatDeckGeometry = useMemo(
+    () =>
+      createTaperedBoxGeometry({
+        aftHalfWidth: B * 0.44,
+        bowHalfWidth: B * 0.38,
+        height: 0.24,
+        length: L * 0.26,
+      }),
+    [B, L],
+  );
+  return (
+    <group>
+      <mesh castShadow receiveShadow geometry={houseGeometry} position={[0, DECK_Y + 0.02, -L * 0.12]}>
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
+      </mesh>
+      <mesh castShadow receiveShadow geometry={boatDeckGeometry} position={[0, HOUSE_TOP_Y + 0.24, -L * 0.18]}>
+        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.55} />
+      </mesh>
+      <mesh castShadow position={[0, HOUSE_TOP_Y + 0.56, -L * 0.18]}>
+        <boxGeometry args={[B * 0.30, 0.16, 0.28]} />
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.5} />
+      </mesh>
+      <mesh castShadow position={[0, HOUSE_TOP_Y + 0.80, -L * 0.18]} scale={[1, 0.75, 1]}>
+        <sphereGeometry args={[0.34, 16, 12]} />
+        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.45} />
+      </mesh>
+    </group>
+  );
+}
+
 export function BoatVisual({
   boat,
   turboActive,
@@ -478,7 +618,15 @@ export function BoatVisual({
         )),
       )}
 
-      <GrandBanksTopsides boat={boat} />
+      {boat.visual.hullProfile === "express" ? (
+        <ExpressTopsides boat={boat} />
+      ) : boat.visual.hullProfile === "flybridge" ? (
+        <FlybridgeTopsides boat={boat} />
+      ) : boat.visual.hullProfile === "superyacht" ? (
+        <SuperyachtTopsides boat={boat} />
+      ) : (
+        <TrawlerTopsides boat={boat} />
+      )}
     </group>
   );
 }

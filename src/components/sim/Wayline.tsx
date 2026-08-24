@@ -22,7 +22,11 @@ type WaylineProps = {
 
 const LINE_Y = 0.14;
 // Replan once the boat has moved this far from the last planning position.
-const REPLAN_DISTANCE_M = 3;
+// Three metres was far too eager: at manoeuvring speed that fires several
+// times a second, and each replan is an A* across the whole scene.
+const REPLAN_DISTANCE_M = 8;
+/** However far it drifts, never replan more often than this. */
+const REPLAN_INTERVAL_MS = 300;
 
 // LineSegmentsGeometry.setPositions must always receive the same vertex
 // count the geometry was built with — growing it breaks the renderer's
@@ -48,6 +52,7 @@ export function Wayline({ bodyRef, layout, target }: WaylineProps) {
   const pathRef = useRef<Vec2[] | null>(null);
   const plannedFromRef = useRef<Vec2 | null>(null);
   const plannedTargetRef = useRef<Vec2 | null>(null);
+  const plannedAtRef = useRef(0);
 
   const grid = useMemo(
     () =>
@@ -98,10 +103,14 @@ export function Wayline({ bodyRef, layout, target }: WaylineProps) {
       Math.hypot(boat[0] - plannedFrom[0], boat[1] - plannedFrom[1]) >
         REPLAN_DISTANCE_M;
 
-    if (targetChanged || movedFar || !pathRef.current) {
+    const now = performance.now();
+    const dueForReplan = now - plannedAtRef.current > REPLAN_INTERVAL_MS;
+
+    if ((targetChanged || movedFar || !pathRef.current) && dueForReplan) {
       pathRef.current = findWaterPath(grid, boat, target);
       plannedFromRef.current = boat;
       plannedTargetRef.current = [target[0], target[1]];
+      plannedAtRef.current = now;
     }
 
     // No route (should not happen in practice): fall back to bearing only.

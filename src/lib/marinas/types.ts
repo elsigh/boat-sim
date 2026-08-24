@@ -1,6 +1,11 @@
-// Marina scenes use a local, roughly to-scale coordinate frame:
-// +z is true north, +x is east, units are meters, y = 0 at the waterline.
-// Headings are degrees true (0 = north, 90 = east), matching boat telemetry.
+// Marina scenes use the chart frame: +z is true north, +x is east, units are
+// metres, y = 0 at the waterline, and the origin is the scene origin declared
+// in scripts/charts/scenes.py. Headings are degrees true (0 = north, 90 = east).
+//
+// The shoreline, depths and most dock structures come from the generated chart
+// (src/lib/charts). What lives here is the stuff a chart can't tell you: which
+// berth you're aiming for, where an exercise starts, what the wind is doing,
+// and the local knowledge you'd get from someone who's been in before.
 
 export type Vec2 = [number, number];
 
@@ -41,7 +46,7 @@ export type PilingRun = {
 export type Berth = {
   id: string;
   label: string;
-  kind: "alongside" | "slip";
+  kind: "alongside" | "slip" | "buoy";
   /** Desired boat-center position when docked. */
   center: Vec2;
   /** Desired final heading when docked. */
@@ -63,6 +68,14 @@ export type SpawnPoint = {
   yawDeg: number;
   /** Berth this spawn is meant to practice against. */
   berthId: string;
+  /**
+   * Roughly how far out this exercise starts. "passage" spawns put you a mile
+   * or more offshore on the real approach; "close" spawns drop you just
+   * outside the berth for repetition work.
+   */
+  range?: "close" | "approach" | "passage";
+  /** One-line description of what the run in actually involves. */
+  brief?: string;
 };
 
 export type MarinaWind = {
@@ -77,10 +90,20 @@ export type MarinaWind = {
 export type MarinaLayout = {
   id: string;
   name: string;
+  /** Chart to draw the shoreline, depths and OSM structures from. Defaults to `id`. */
+  chartId?: string;
+  /** Set false for scenes where OSM dock geometry is wrong or unwanted. */
+  useChartStructures?: boolean;
   vhfChannel?: string;
   briefing: string[];
-  land: LandMass[];
+  /**
+   * Hand-authored above-water structures the chart doesn't carry — rock
+   * breakwaters, boathouse rows and the like. The natural shoreline comes
+   * from the chart, so this stays short.
+   */
+  land?: LandMass[];
   trees?: TreeCluster[];
+  /** Hand-authored floats: park docks and anything OSM is missing. */
   docks: DockFloat[];
   pilings: PilingRun[];
   berths: Berth[];

@@ -8,6 +8,7 @@ import {
 import { useMemo } from "react";
 
 import { offset } from "@/lib/marinas/builders";
+import { sceneDocks } from "@/lib/marinas/scene";
 import type { MarinaLayout } from "@/lib/marinas/types";
 
 import {
@@ -22,7 +23,32 @@ const CONTACT_RESTITUTION = 0.05;
 // Every slip full would make the exercises impossible to read; roughly two
 // thirds occupancy looks like an August marina with the transient dock open.
 const OCCUPANCY = 0.66;
+// Hand-authored fingers are named; chart fingers come out of OSM with opaque
+// ids, so they're recognised by shape instead: a narrow float 8-34 m long.
 const FINGER_ID_PATTERN = /-finger-(left|right)-\d+$/;
+const FINGER_MAX_WIDTH_M = 1.8;
+const FINGER_MIN_LENGTH_M = 8;
+const FINGER_MAX_LENGTH_M = 34;
+// A big harbour has hundreds of slips. Filling all of them costs more than it
+// adds, so the nearest few hundred metres of the exercise get the boats.
+const MAX_MOORINGS = 130;
+
+function isFingerFloat(dock: { id: string; size: [number, number]; kind?: string }) {
+  if (FINGER_ID_PATTERN.test(dock.id)) {
+    return true;
+  }
+
+  if (dock.kind === "breakwater") {
+    return false;
+  }
+
+  const [width, length] = dock.size;
+  return (
+    width <= FINGER_MAX_WIDTH_M &&
+    length >= FINGER_MIN_LENGTH_M &&
+    length <= FINGER_MAX_LENGTH_M
+  );
+}
 
 type Mooring = {
   id: string;
@@ -61,9 +87,20 @@ function clamp(value: number, min: number, max: number) {
 export function deriveMoorings(layout: MarinaLayout): Mooring[] {
   const moorings: Mooring[] = [];
 
-  for (const dock of layout.docks) {
-    if (!FINGER_ID_PATTERN.test(dock.id)) {
-      continue;
+  // Work outward from the berths so the slips you can actually see are the
+  // ones that get filled when the cap bites.
+  const focus = layout.berths[0]?.center ?? [0, 0];
+  const candidates = sceneDocks(layout)
+    .filter(isFingerFloat)
+    .sort(
+      (a, b) =>
+        Math.hypot(a.position[0] - focus[0], a.position[1] - focus[1]) -
+        Math.hypot(b.position[0] - focus[0], b.position[1] - focus[1]),
+    );
+
+  for (const dock of candidates) {
+    if (moorings.length >= MAX_MOORINGS) {
+      break;
     }
 
     const random = mulberry32(hashString(`${layout.id}:${dock.id}`));

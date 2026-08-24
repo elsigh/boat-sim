@@ -129,10 +129,12 @@ function throttleToThrust(
     magnitude * config.throttleLinearBlend +
     Math.pow(magnitude, config.throttleExponent) * (1 - config.throttleLinearBlend);
   const shapedThrottle = Math.sign(throttle) * shapedMagnitude;
-  const baseThrust =
-    shapedThrottle >= 0
-      ? shapedThrottle * config.maxForwardThrustN
-      : shapedThrottle * config.maxReverseThrustN;
+  // Mild low-speed boost for close-quarters handling: blend a small linear term
+  // that fades as water-relative surge rises.
+  const lowSpeedFactor = 1 / (1 + Math.abs(waterRelativeSurgeSpeed) * 1.2);
+  const forwardThrust = shapedMagnitude * config.maxForwardThrustN * (1 + 0.12 * lowSpeedFactor);
+  const reverseThrust = shapedMagnitude * config.maxReverseThrustN * (1 + 0.10 * lowSpeedFactor);
+  const baseThrust = (shapedThrottle >= 0 ? forwardThrust : -reverseThrust) * Math.sign(shapedThrottle || 1);
   const speedWithProp = Math.max(0, Math.sign(baseThrust) * waterRelativeSurgeSpeed);
   const slipReduction = 1 / (1 + speedWithProp * 0.22);
 
