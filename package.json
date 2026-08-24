@@ -11,9 +11,9 @@
     "build": "next build",
     "start": "next start",
     "export": "NEXT_OUTPUT=export next build",
-    "app:dev": "npm run export && electron .",
-    "app:build": "npm run export && electron-builder --mac dmg zip",
-    "app:mas": "npm run export && electron-builder --mac mas"
+    "app:dev": "pnpm run export && electron .",
+    "app:build": "pnpm run export && electron-builder --mac dmg zip",
+    "app:mas": "pnpm run export && electron-builder --mac mas"
   },
   "build": {
     "appId": "com.elsigh.boatsim",
@@ -58,7 +58,8 @@
     "next": "preview",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "three-stdlib": "^2.36.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -236,14 +236,14 @@ puts it back.
 ## Running it
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open http://localhost:3000, pick a marina and an exercise, `START ENGINES`,
 and try to dock without appearing in the incident log. `H` hides the panels.
 
-The Electron desktop build (`npm run app:dev` / `npm run app:build`) wraps the
+The Electron desktop build (`pnpm app:dev` / `pnpm app:build`) wraps the
 static export for offline use aboard.
 
 ## Stack
