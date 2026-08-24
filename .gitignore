@@ -40,3 +40,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dist-app/
+
+# chart pipeline scratch: ~100 MB of NOAA DEM tiles and Overpass responses,
+# plus the PNG previews verify.py renders. All of it is re-fetchable with
+# scripts/charts/fetch_dem.py and fetch_osm.py, and none of it belongs in git —
+# the committed artifact is src/lib/charts/generated/.
+scripts/charts/cache/
+scripts/charts/preview/
+__pycache__/
+
+# d3k writes this while it has a browser attached
+.d3k-browser.pid
