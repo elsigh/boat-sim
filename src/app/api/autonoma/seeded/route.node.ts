@@ -49,8 +49,6 @@ export async function GET(): Promise<Response> {
         label: spawn.label,
         kind: spawn.kind,
         berthId: spawn.berthId,
-        range: spawn.range,
-        brief: spawn.brief,
         position: spawn.position,
         yawDeg: spawn.yawDeg,
       })),

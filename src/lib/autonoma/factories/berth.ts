@@ -23,7 +23,7 @@ export const BerthFactory = defineFactory({
   inputSchema: z.object({
     id: z.string(),
     label: z.string(),
-    kind: z.enum(["alongside", "slip", "buoy"]),
+    kind: z.enum(["alongside", "slip"]),
     /** Resolved MarinaLayout id — the layout this berth belongs to. */
     marinaLayoutId: z.string(),
     dockSide: z.enum(["port", "starboard"]),

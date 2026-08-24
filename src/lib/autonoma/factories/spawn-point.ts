@@ -36,8 +36,6 @@ export const SpawnPointFactory = defineFactory({
     kind: z.enum(["arrival", "departure"]),
     /** Resolved Berth id — the berth this spawn practises against. */
     berthId: z.string(),
-    range: z.enum(["close", "approach", "passage"]).optional(),
-    brief: z.string().optional(),
     /** Chart-frame start position and heading. Borrowed when omitted. */
     position: z.tuple([z.number(), z.number()]).optional(),
     yawDeg: z.number().optional(),
@@ -71,8 +69,6 @@ export const SpawnPointFactory = defineFactory({
       label: data.label,
       kind: data.kind,
       berthId: data.berthId,
-      range: data.range ?? borrowed.range,
-      brief: data.brief ?? borrowed.brief,
       position: data.position ?? borrowed.position,
       yawDeg: data.yawDeg ?? borrowed.yawDeg,
     });
