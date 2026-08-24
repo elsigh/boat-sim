@@ -1,0 +1,64 @@
+src/lib/autonoma/factories/impact-incident.ts
+  s_293d623235eea6::t_d1a646406f0a2c 1-116
+src/lib/autonoma/factories/marina-layout.ts
+  s_293d623235eea6::t_6fcfb216b78d98 1-15,18-27,29,31-37,40-42
+  s_293d623235eea6::t_0bf7c924b5449c 16-17,30,38
+  s_293d623235eea6::t_f3aef4c74ccf40 28,39
+src/lib/marinas/index.ts
+  s_293d623235eea6::t_5c710fddd3ecc0 10-15,23,27-35,57-58,76-78,103-129,131-173
+  s_293d623235eea6::t_5ada58998260f4 87,130
+  s_293d623235eea6::t_3b8c0cc3fd3b45 175-187
+  s_293d623235eea6::t_269563d3291867 86,88,94,174
+src/lib/autonoma/factories/spawn-point.ts
+  s_293d623235eea6::t_fea6d706ddc7c9 1-95
+src/lib/autonoma/factories/index.ts
+  s_293d623235eea6::t_c346d67894644a 1-14
+AGENTS.md
+  s_293d623235eea6::t_618ec1a347e370 10-29
+src/app/api/autonoma/seeded/route.node.ts
+  s_293d623235eea6::t_d351eb44250f4c 1-60
+next.config.ts
+  s_293d623235eea6::t_dcd2ef15963ef4 19-25
+src/lib/autonoma/store.ts
+  s_293d623235eea6::t_ca873ee3991344 25-26,57
+  s_293d623235eea6::t_adcf34d3f9ccf2 1-24,27-56,58-121
+src/lib/autonoma/factories/berth.ts
+  s_293d623235eea6::t_e35206f7b2953f 1-90
+src/app/boats/page.tsx
+  s_293d623235eea6::t_f81c5da9032cf6 3,6-7,31
+src/lib/autonoma/factories/boat-profile.ts
+  s_293d623235eea6::t_1a02e900a30d2e 5,7,20,29-30,35,39
+  s_293d623235eea6::t_ce70b6000c1608 1-4,6,8-19,21-22,24-28,31-33,36-38,40,42-44
+  s_293d623235eea6::t_0bf7c924b5449c 23,34,41
+src/app/api/autonoma/route.node.ts
+  s_293d623235eea6::t_c91ed8a948f2b4 1-78
+src/lib/boats/catalog.ts
+  s_293d623235eea6::t_bdef16fb58a642 1,279-346
+  s_293d623235eea6::t_6110ef746d8d43 347-352
+IMPLEMENTATION.md
+  s_293d623235eea6::t_96f7e804510acd 1-10,15-16,18,20-21,23-28,30,32,39-41,53-55,58-60
+  s_293d623235eea6::t_22fcff22dbd972 11-14,17,19,22,29,31,33-38,42-52,56-57,61-107
+src/app/boats/[slug]/page.tsx
+  s_293d623235eea6::t_f81c5da9032cf6 4,18
+package.json
+  s_293d623235eea6::t_2b0c23b1b2b451 63-64
+  s_293d623235eea6::t_267da399d48cfe 54-55
+pnpm-lock.yaml
+  s_293d623235eea6::t_4485b324f5224c 1-3936
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "50e2d10c0c4ba53d64e62a4ae78f03ca363abb56",
+  "prompts": {},
+  "sessions": {
+    "s_293d623235eea6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c5960c79-81f0-45a3-841c-4674894c4e27",
+        "model": "claude-opus-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
