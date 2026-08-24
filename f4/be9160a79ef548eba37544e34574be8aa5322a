@@ -1,0 +1,19 @@
+src/lib/autonoma/factories/berth.ts
+  s_d71abf619853ac::t_d5d84573b65225 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f4be9160a79ef548eba37544e34574be8aa5322a",
+  "prompts": {},
+  "sessions": {
+    "s_d71abf619853ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92d590f8-427c-4710-aa77-aad23cd7c109",
+        "model": "claude-opus-5"
+      },
+      "human_author": "elsigh <elsigh@gmail.com>"
+    }
+  }
+}
