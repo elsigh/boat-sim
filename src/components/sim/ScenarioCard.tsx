@@ -13,6 +13,7 @@ type ScenarioCardProps = {
   } | null;
   onSelectLeg: (index: number) => void;
   onResetToStop: (stopId: string) => void;
+  onOpenLocationDialog?: (stopId: string) => void;
   scenario: CruiseScenario;
 };
 
@@ -37,6 +38,7 @@ export function ScenarioCard({
   mapBoatCoordinate,
   onSelectLeg,
   onResetToStop,
+  onOpenLocationDialog,
   scenario,
 }: ScenarioCardProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -112,6 +114,7 @@ export function ScenarioCard({
           <RouteMiniMap
             activeLegIndex={activeLegIndex}
             boatCoordinate={mapBoatCoordinate}
+            onOpenLocationDialog={onOpenLocationDialog}
             onResetToStop={onResetToStop}
             scenario={scenario}
           />
@@ -154,6 +157,7 @@ export function ScenarioCard({
 function RouteMiniMap({
   activeLegIndex,
   boatCoordinate,
+  onOpenLocationDialog,
   onResetToStop,
   scenario,
 }: {
@@ -162,6 +166,7 @@ function RouteMiniMap({
     lat: number;
     lon: number;
   } | null;
+  onOpenLocationDialog?: (stopId: string) => void;
   onResetToStop: (stopId: string) => void;
   scenario: CruiseScenario;
 }) {
@@ -206,7 +211,7 @@ function RouteMiniMap({
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.22em] text-slate-400">Route Map</p>
           <p className="mt-1 text-xs text-slate-300">
-            Click a stop to reset nearby
+            Click a stop to switch location
           </p>
         </div>
         {boatCoordinate ? (
@@ -247,16 +252,23 @@ function RouteMiniMap({
           ) : null}
         </svg>
 
-        {scenario.stops.map((stop) => {
+        {scenario.stops.map((stop, index) => {
           const point = project(stop.coordinate);
           const isActive =
             stop.id === activeLeg?.fromStopId || stop.id === activeLeg?.toStopId;
+          const displayNumber = index > 0 ? index : null;
 
           return (
             <button
               key={stop.id}
               type="button"
-              onClick={() => onResetToStop(stop.id)}
+              onClick={() => {
+                if (onOpenLocationDialog) {
+                  onOpenLocationDialog(stop.id);
+                } else {
+                  onResetToStop(stop.id);
+                }
+              }}
               className="absolute -translate-x-1/2 -translate-y-1/2"
               style={{ left: `${point.x}%`, top: `${point.y}%` }}
             >
@@ -267,8 +279,17 @@ function RouteMiniMap({
                     : "border-white/70 bg-slate-950/90"
                 }`}
               />
+              {displayNumber !== null ? (
+                <span
+                  className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[0.55rem] font-semibold ${
+                    isActive ? "text-slate-900" : "text-slate-100"
+                  }`}
+                >
+                  {displayNumber}
+                </span>
+              ) : null}
               <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-950/85 px-2 py-1 text-[0.55rem] uppercase tracking-[0.18em] text-slate-200">
-                {stop.shortName}
+                {displayNumber !== null ? `${displayNumber} · ${stop.shortName}` : stop.shortName}
               </span>
             </button>
           );
