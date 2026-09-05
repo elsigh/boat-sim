@@ -54,6 +54,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
     "@react-three/rapier": "^2.2.0",
+    "@vercel/blob": "^2.8.0",
     "electron-serve": "^2.1.1",
     "next": "preview",
     "react": "19.2.4",
@@ -66,10 +67,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.185.4",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "typescript": "^7.0.2"
-  }
+  },
+  "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e"
 }

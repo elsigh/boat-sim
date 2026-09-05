@@ -89,7 +89,7 @@ export function PanelLabel({
 }) {
   return (
     <span
-      className={`block whitespace-nowrap text-[0.62rem] leading-none ${className}`}
+      className={`block whitespace-nowrap text-[0.74rem] leading-none ${className}`}
       style={{
         fontFamily: "var(--helm-font-label)",
         fontWeight: "var(--helm-label-weight)" as unknown as number,
@@ -160,10 +160,10 @@ export function Readout({
   className?: string;
 }) {
   const sizes = {
-    sm: "text-[0.72rem]",
-    md: "text-[0.95rem]",
-    lg: "text-[1.45rem]",
-    xl: "text-[2.1rem]",
+    sm: "text-[0.84rem]",
+    md: "text-[1.07rem]",
+    lg: "text-[1.57rem]",
+    xl: "text-[2.22rem]",
   } as const;
   const color =
     tone === "readout"
@@ -187,7 +187,7 @@ export function Readout({
       </span>
       {unit ? (
         <span
-          className="text-[0.55rem] leading-none"
+          className="text-[0.67rem] leading-none"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.14em",
@@ -218,7 +218,7 @@ export function Metric({
 }) {
   return (
     <Well className={`px-2 py-1.5 ${className}`}>
-      <PanelLabel dim className="!text-[0.5rem]">
+      <PanelLabel dim className="!text-[0.62rem]">
         {label}
       </PanelLabel>
       <div className="mt-1">
@@ -243,7 +243,7 @@ export function Chip({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-[0.15rem] text-[0.55rem] leading-none ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-[0.15rem] text-[0.67rem] leading-none ${className}`}
       style={{
         fontFamily: "var(--helm-font-label)",
         letterSpacing: "0.16em",

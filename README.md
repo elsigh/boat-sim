@@ -69,14 +69,22 @@ calibration so lever travel above the detent means ahead and below means
 astern, and the quadrant's switches double as engine masters and ignition.
 
 No hardware? Keyboard works: `W`/`S` port throttle, `I`/`K` starboard,
-`A`/`D` bow thruster. (Use Chrome for the quadrant — Safari never exposes
+`A`/`D` bow thruster, `Space` both levers to neutral. Start with both levers
+in neutral. (Use Chrome for the quadrant — Safari never exposes
 it.)
 
 ## What's in the sim
 
 - **Physics that punish impatience** — per-engine thrust with prop walk,
   bow thruster at the bow, wind and current per marina, quadratic hull drag,
-  and honest inertia. Telemetry shows SOG, heading, drift, and yaw rate.
+  and honest inertia. Levers stay independent, engaged props make idle thrust,
+  and reversing includes a short neutral dwell and clutch take-up. Drag samples
+  the flow along the turning hull; the bow thruster loses authority with speed.
+  Telemetry distinguishes speed over ground (SOG) from speed through water
+  (STW), alongside heading, drift, and yaw rate.
+- **Water that follows the maneuver** — wind-driven ripples, gentle hull heave
+  and trim, and a wake that stays in the water and drifts with the tide after
+  a turn. Prop wash follows actual engine output, including astern discharge.
 - **Seven real anchorages** from the actual cruise plan, built on survey data
   rather than sketches: Squalicum, Sucia (Fossil Bay), Reid Harbor, Roche
   Harbor, Friday Harbor, Jones Island, and Eagle Harbor. The shoreline is the
@@ -207,8 +215,33 @@ flooding a hillside.
 The plotter can overlay a Google Maps Timeline export — the path the phone in
 your pocket recorded — as a dashed orange track next to the planned magenta
 route. Open the full-screen plotter, hit **Track**, drop in `Timeline.json`,
-pick a date range. Nothing leaves the browser: the file is read with the File
-API and parsed in a web worker.
+pick a date range. Parsing runs locally in a web worker. Choose **Save route**,
+enter a **Name**, then **Save**. The name is the storage key; saving the same name
+offers **Replace saved route**. Names are case-sensitive, trimmed, and Unicode
+normalized; distinct names are not collapsed into slugs.
+
+Each saved JSON is a self-contained `boatsim-route` snapshot: the name, source
+filename, save time, selected date bounds as UTC milliseconds, track visibility,
+and every original parsed point within those bounds (inclusive). The source
+Google export and out-of-range data are not stored. Drawing simplification does
+not remove points from the saved snapshot. **Saved routes → Load** restores the
+points and date filters from the file. Changing filters never autosaves; choose
+**Save route** again to capture a different range. To widen beyond a loaded
+snapshot, import the original Timeline file. **Unload** clears the plotter;
+**Delete** removes the saved copy after confirmation.
+
+The web library is shared across browsers without a login or browser key.
+The server-only `BLOB_READ_WRITE_TOKEN` connects the project's Blob store; the
+existing store is private at the storage layer, with shared app access restricted
+to `saved-routes/v2/`. Each archive uses its encoded name as its filename and
+uploads directly to Blob (up to 200 MB), avoiding function request limits.
+Listing routes reads names without downloading their point data. Older full
+uploads are left untouched and are not exposed in the shared library.
+
+The static Electron export has no API server, so it saves the same snapshots
+in IndexedDB instead. A development server without Blob configuration also uses
+device storage, labeled in the drawer. Network errors do not silently switch
+a cloud library to local storage.
 
 Google has shipped at least four shapes of this file, so
 `src/lib/tracks/google-timeline.ts` doesn't pattern-match a schema — it walks
@@ -230,7 +263,7 @@ instant is exact; the date pickers are in your computer's local timezone.
 Because each scene's chart is a window around one harbour, a track spanning the
 whole cruise will run past the edge of the survey. That's allowed: **Fit track**
 frames the whole thing and the parts with no chart under them draw over the grey
-no-data area. Panning or fitting detaches the view from the boat; **⌖ Boat**
+no-data area. Panning or fitting detaches the view from the boat; **Recentre on the boat**
 puts it back.
 
 ## Running it
@@ -245,6 +278,14 @@ and try to dock without appearing in the incident log. `H` hides the panels.
 
 The Electron desktop build (`pnpm app:dev` / `pnpm app:build`) wraps the
 static export for offline use aboard.
+
+Check handling changes with `bun test src/lib/sim/boat-physics.test.ts`, then
+`pnpm typecheck` and `pnpm build`. The focused tests cover clutch transitions,
+prop walk and turning direction, water-relative drift, passive hull resistance,
+coasting and reverse braking, and the Grand Banks cruise calibration. These
+are a simplified maneuvering model and visual sea state, not a CFD solution
+or sea-trial validation; experimental vessels retain their listed drivetrain
+approximations.
 
 ## Stack
 

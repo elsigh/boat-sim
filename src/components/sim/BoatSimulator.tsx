@@ -9,6 +9,7 @@ import type { WheelEventHandler } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BOAT_CATALOG, DEFAULT_BOAT_SLUG, getBoatProfile } from "@/lib/boats/catalog";
+import { draftFeet as draftFeetFor } from "@/lib/boats/stats";
 import { useGamepad } from "@/hooks/useGamepad";
 import { useEngineAudio } from "@/hooks/useEngineAudio";
 import { useEngineState } from "@/hooks/useEngineState";
@@ -30,7 +31,7 @@ import {
   ImpactTracker,
   type RawImpact,
 } from "@/lib/sim/collision-damage";
-import { estimateDepthMeters } from "@/lib/sim/bathymetry";
+import { depthGroundsBoat, estimateDepthMeters } from "@/lib/sim/bathymetry";
 import { useViewportCamera } from "@/hooks/useViewportCamera";
 
 import { Boat } from "./Boat";
@@ -41,6 +42,7 @@ import { ImpactMarks } from "./ImpactMarks";
 import { Marina } from "./Marina";
 import { MarinaTraffic, type TrafficTarget } from "./MarinaTraffic";
 import { HazardSpawners } from "./HazardSpawners";
+import { GroundingOverlay } from "./GroundingOverlay";
 import type { Hazard } from "./HazardSpawners";
 import { MooredBoats } from "./MooredBoats";
 import { SimCameraRig } from "./SimCameraRig";
@@ -230,6 +232,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   const [breadcrumb, setBreadcrumb] = useState<Array<{ lat: number; lon: number }>>([]);
   const [breadcrumbWorld, setBreadcrumbWorld] = useState<Array<{ x: number; z: number }>>([]);
   const [depthFeet, setDepthFeet] = useState<number | null>(null);
+  const [grounding, setGrounding] = useState<{
+    depthFeet: number;
+    draftFeet: number;
+  } | null>(null);
+  const groundingRef = useRef<typeof grounding>(null);
   const lastWorldRef = useRef<{ x: number; z: number } | null>(null);
   const [anchor, setAnchor] = useState<{
     active: boolean;
@@ -314,6 +321,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     () => getBoatProfile(selectedBoatSlug),
     [selectedBoatSlug],
   );
+  const selectedBoatDraftFeet = useMemo(() => draftFeetFor(selectedBoat), [selectedBoat]);
   const throttleAxes = useMemo(
     () => (leversSwapped ? { port: 1, starboard: 0 } : { port: 0, starboard: 1 }),
     [leversSwapped],
@@ -444,14 +452,14 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     },
     [],
   );
-  // Build a persistent environment object so we can mutate currentVelocity dynamically.
-  const environmentRefState = useRef<SimulationEnvironment>(
-    conditionsMode === "calm" ? { ...CALM_TEST_ENVIRONMENT } : buildEnvironment(marina.conditions),
+  // Own each environment's vectors: local tide updates must never mutate the
+  // shared calm preset, and condition changes must reach the physics immediately.
+  const environment = useMemo<SimulationEnvironment>(
+    () => conditionsMode === "calm"
+      ? { windVelocity: CALM_TEST_ENVIRONMENT.windVelocity.clone(), currentVelocity: CALM_TEST_ENVIRONMENT.currentVelocity.clone() }
+      : buildEnvironment(marina.conditions),
+    [conditionsMode, marina.conditions],
   );
-  useEffect(() => {
-    environmentRefState.current =
-      conditionsMode === "calm" ? { ...CALM_TEST_ENVIRONMENT } : buildEnvironment(marina.conditions);
-  }, [conditionsMode, marina.conditions]);
   const guidance = useMemo(
     () => (selectedBerth ? computeBerthGuidance(telemetry, selectedBerth) : null),
     [selectedBerth, telemetry],
@@ -540,6 +548,8 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       impactTrackerRef.current.reset();
       setHullIntegrityPct(100);
       setIncidents([]);
+      groundingRef.current = null;
+      setGrounding(null);
 
       if (dockTimerRef.current) {
         window.clearTimeout(dockTimerRef.current);
@@ -677,10 +687,29 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     });
     // Live depth from scene geometry
     const meters = estimateDepthMeters(marina, [position.x, position.z]);
-    setDepthFeet(meters * 3.28084);
+    const sampledDepthFeet = meters * 3.28084;
+    setDepthFeet(sampledDepthFeet);
+
+    if (
+      !groundingRef.current &&
+      depthGroundsBoat(meters, selectedBoatDraftFeet / 3.28084)
+    ) {
+      const nextGrounding = {
+        depthFeet: sampledDepthFeet,
+        draftFeet: selectedBoatDraftFeet,
+      };
+      groundingRef.current = nextGrounding;
+      setGrounding(nextGrounding);
+      setTurboActive(false);
+      setTenderActive(false);
+    }
     // Dynamic local current (tide rips etc): mutate environment's currentVelocity
-    const current = computeLocalCurrent(marina, position);
-    environmentRefState.current.currentVelocity.set(current.x, 0, current.z);
+    if (conditionsMode === "calm") {
+      environment.currentVelocity.set(0, 0, 0);
+    } else {
+      const current = computeLocalCurrent(marina, position);
+      environment.currentVelocity.set(current.x, 0, current.z);
+    }
 
     // Tender auto-return: if active, when close to anchor and slow, stow
     if (tenderAutoReturn?.active && anchor.point && tenderRef.current) {
@@ -872,7 +901,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
           shadow-camera-far={600}
         />
 
-        <Water />
+        <Water environment={environment} />
         <Wayline
           bodyRef={boatBodyRef}
           layout={marina}
@@ -934,7 +963,8 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
             boat={selectedBoat}
             controls={controls}
             engineState={engineState}
-            environment={environmentRefState.current}
+            environment={environment}
+            grounded={grounding !== null}
             anchorConfig={
               anchor.active && anchor.point
                 ? {
@@ -962,6 +992,15 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       ) : null}
 
       <DamageOverlay hullIntegrityPct={hullIntegrityPct} incidents={incidents} selectedBoat={selectedBoat} />
+
+      {grounding ? (
+        <GroundingOverlay
+          boat={selectedBoat}
+          depthFeet={grounding.depthFeet}
+          draftFeet={grounding.draftFeet}
+          onRestart={handleRestartBoat}
+        />
+      ) : null}
 
       <DockingOverlay
         audioEnabled={engineAudio.audioEnabled}

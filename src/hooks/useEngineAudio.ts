@@ -219,9 +219,10 @@ function updateVoice(
 ) {
   const time = context.currentTime;
   const demand = Math.abs(engine.effectiveThrottle);
+  const revs = Math.max(0, Math.min(1, (engine.rpm - 650) / (2400 - 650)));
   const engaged = engine.starting || engine.running;
   const firingHz = engine.running
-    ? IDLE_FIRING_HZ + voice.firingOffsetHz + demand * (FULL_FIRING_HZ - IDLE_FIRING_HZ)
+    ? IDLE_FIRING_HZ + voice.firingOffsetHz + revs * (FULL_FIRING_HZ - IDLE_FIRING_HZ)
     : 7;
 
   setTarget(voice.outputGain.gain, engaged ? 0.5 : 0.0001, time, 0.12);
@@ -284,6 +285,12 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
     const rig = rigRef.current;
 
     if (!rig) {
+      if (nextEnabled !== undefined) {
+        userMutedRef.current = !nextEnabled;
+        writeMutedPreference(!nextEnabled);
+        setAudioEnabled(false);
+      }
+
       return;
     }
 
@@ -317,7 +324,8 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
       return undefined;
     }
 
-    userMutedRef.current = readMutedPreference();
+    const startsMuted = readMutedPreference();
+    userMutedRef.current = startsMuted;
 
     const context = new AudioContextCtor();
     const noiseBuffer = createNoiseBuffer(context);
@@ -332,6 +340,16 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
     rigRef.current = rig;
     syncRigVoices(rig, engineStateRef.current);
 
+    if (startsMuted) {
+      // A newly constructed AudioContext can begin in `running`, especially
+      // during Fast Refresh. Persisted mute is user intent and must win over
+      // the context's lifecycle state.
+      setAudioEnabled(false);
+      void context.suspend();
+    } else if (context.state === "running") {
+      setAudioEnabled(true);
+    }
+
     const unlock = () => {
       if (userMutedRef.current) {
         return;
@@ -343,7 +361,13 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
       });
     };
     const handleStateChange = () => {
-      setAudioEnabled(context.state === "running");
+      if (userMutedRef.current && context.state === "running") {
+        setAudioEnabled(false);
+        void context.suspend();
+        return;
+      }
+
+      setAudioEnabled(!userMutedRef.current && context.state === "running");
       syncRigVoices(rig, engineStateRef.current);
     };
 

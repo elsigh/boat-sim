@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 const isStaticExport = process.env.NEXT_OUTPUT === "export";
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_STATIC_EXPORT: isStaticExport ? "1" : "0" },
   // StrictMode's dev-only double mount makes @react-three/rapier's suspended
   // WASM init tear down the WebGL context (react-three-fiber force-loses it on
   // unmount, and the same canvas element can never get a live context back).

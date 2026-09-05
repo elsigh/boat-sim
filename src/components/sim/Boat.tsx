@@ -24,6 +24,7 @@ import { liveRigidBody } from "@/lib/sim/rapier-utils";
 
 import { BoatVisual } from "./BoatVisual";
 import { WashEffects } from "./WashEffects";
+import { WakeTrail } from "./WakeTrail";
 
 type BoatProps = {
   bodyRef: MutableRefObject<RapierRigidBody | null>;
@@ -46,6 +47,7 @@ type BoatProps = {
   onImpact?: (impact: RawImpact) => void;
   onPositionSample?: (position: { x: number; z: number }) => void;
   onTelemetry: (telemetry: DockingTelemetry) => void;
+  grounded?: boolean;
   resetRequest?: {
     id: number;
     position: [number, number, number];
@@ -66,10 +68,10 @@ const impactTranslation = new Vector3();
 const HULL_CONTACT_FRICTION = 0.01;
 const HULL_CONTACT_RESTITUTION = 0;
 const HULL_WATERLINE_Y = 0.9;
-const HULL_LINEAR_DAMPING = 0.015;
-// Keep built-in angular damping near zero: hydrodynamic yaw drag lives in the
-// physics model, and a heavy hull must carry her swing after thrust comes off.
-const HULL_ANGULAR_DAMPING = 0.08;
+const HULL_LINEAR_DAMPING = 0;
+// All drag is relative to water and lives in the force model. World-space
+// damping would incorrectly resist a hull drifting with the current.
+const HULL_ANGULAR_DAMPING = 0;
 
 type ResetPose = NonNullable<BoatProps["resetRequest"]>;
 
@@ -110,6 +112,7 @@ export function Boat({
   onImpact,
   onPositionSample,
   onTelemetry,
+  grounded = false,
   resetRequest,
   turboActive,
 }: BoatProps) {
@@ -123,6 +126,7 @@ export function Boat({
   const environmentRef = useRef(environment);
   const resetRequestRef = useRef(resetRequest);
   const turboActiveRef = useRef(turboActive);
+  const groundedRef = useRef(grounded);
   const appliedResetIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -173,6 +177,10 @@ export function Boat({
     turboActiveRef.current = turboActive;
   }, [turboActive]);
 
+  useEffect(() => {
+    groundedRef.current = grounded;
+  }, [grounded]);
+
   useBeforePhysicsStep(() => {
     const body = liveRigidBody(bodyRef);
 
@@ -212,6 +220,29 @@ export function Boat({
     worldRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
     worldVelocity.set(linearVelocity.x, linearVelocity.y, linearVelocity.z);
 
+    if (groundedRef.current) {
+      body.resetForces(true);
+      body.resetTorques(true);
+      body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
+      const stopped = computeBoatPhysics(
+        boatRef.current,
+        {
+          worldPosition,
+          worldRotation,
+          worldLinearVelocity: worldVelocity.set(0, 0, 0),
+          yawRateRadPerSecond: 0,
+        },
+        { portThrottle: 0, starboardThrottle: 0, bowThruster: 0 },
+        environmentRef.current,
+      );
+
+      telemetryRef.current(stopped.telemetry);
+      positionSampleRef.current?.({ x: translation.x, z: translation.z });
+      return;
+    }
+
     // Contact-force events fire after the solver has already arrested the
     // hull, so impact severity must be judged from the pre-step velocity.
     preStepVelocityRef.current.set(linearVelocity.x, 0, linearVelocity.z);
@@ -225,8 +256,8 @@ export function Boat({
         yawRateRadPerSecond: angularVelocity.y,
       },
       {
-        portThrottle: engineStateRef.current.port.effectiveThrottle,
-        starboardThrottle: engineStateRef.current.starboard.effectiveThrottle,
+        portThrottle: engineStateRef.current.port.running ? engineStateRef.current.port.effectiveThrottle : 0,
+        starboardThrottle: engineStateRef.current.starboard.running ? engineStateRef.current.starboard.effectiveThrottle : 0,
         bowThruster: controlsRef.current.bowThruster,
         turboSpeedMultiplier: turboActiveRef.current ? 10 : 1,
       },
@@ -343,6 +374,7 @@ export function Boat({
   };
 
   return (
+    <>
     <RigidBody
       ref={bodyRef}
       type="dynamic"
@@ -372,7 +404,7 @@ export function Boat({
         restitutionCombineRule={CoefficientCombineRule.Min}
       />
 
-      <BoatVisual boat={boat} turboActive={turboActive} />
+      <BoatVisual boat={boat} turboActive={turboActive} bodyRef={bodyRef} environment={environment} grounded={grounded} />
 
       {/* scars from recorded impacts, pinned to the hull at rub-rail height */}
       {hullDamageMarks.map((mark) => {
@@ -409,7 +441,11 @@ export function Boat({
         controlsRef={controlsRef}
         engineStateRef={engineStateRef}
         turboActive={turboActive}
+        bodyRef={bodyRef}
+        environment={environment}
       />
     </RigidBody>
+    <WakeTrail boat={boat} bodyRef={bodyRef} engineStateRef={engineStateRef} environment={environment} resetId={resetRequest?.id} />
+    </>
   );
 }

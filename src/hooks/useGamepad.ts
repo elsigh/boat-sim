@@ -584,6 +584,15 @@ export function useGamepad(options?: UseGamepadOptions) {
       }
 
       const key = event.key.toLowerCase();
+      if (key === " ") {
+        keyboardState.active = true;
+        keyboardState.portThrottle = 0;
+        keyboardState.starboardThrottle = 0;
+        keyboardState.bowThruster = 0;
+        pressedKeys.clear();
+        event.preventDefault();
+        return;
+      }
       const handled =
         Object.values(resolvedOptions.keyboardThrottleKeys).includes(key) ||
         Object.values(resolvedOptions.keyboardBowThrusterKeys).includes(key);
@@ -611,11 +620,14 @@ export function useGamepad(options?: UseGamepadOptions) {
       event.preventDefault();
     };
 
+    const releaseKeys = () => pressedKeys.clear();
+
     handleGamepadChange();
     frameId = window.requestAnimationFrame(poll);
     window.addEventListener("gamepadconnected", handleGamepadChange);
     window.addEventListener("gamepaddisconnected", handleGamepadChange);
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("blur", releaseKeys);
     window.addEventListener("keyup", handleKeyUp);
 
     return () => {
@@ -623,6 +635,7 @@ export function useGamepad(options?: UseGamepadOptions) {
       window.removeEventListener("gamepadconnected", handleGamepadChange);
       window.removeEventListener("gamepaddisconnected", handleGamepadChange);
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("blur", releaseKeys);
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [resolvedOptions]);

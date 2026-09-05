@@ -5,7 +5,7 @@ import {
   CuboidCollider,
   RigidBody,
 } from "@react-three/rapier";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 
 import { offset } from "@/lib/marinas/builders";
 import { sceneDocks } from "@/lib/marinas/scene";
@@ -161,7 +161,7 @@ export function deriveMoorings(layout: MarinaLayout): Mooring[] {
   return moorings;
 }
 
-export function MooredBoats({ layout }: { layout: MarinaLayout }) {
+export const MooredBoats = memo(function MooredBoats({ layout }: { layout: MarinaLayout }) {
   const moorings = useMemo(() => deriveMoorings(layout), [layout]);
 
   return (
@@ -188,4 +188,4 @@ export function MooredBoats({ layout }: { layout: MarinaLayout }) {
       ))}
     </>
   );
-}
+});

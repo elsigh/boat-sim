@@ -2,7 +2,10 @@
 
 import { useFrame } from "@react-three/fiber";
 import { type MutableRefObject, useMemo, useRef } from "react";
-import { Group, Mesh, ShaderMaterial } from "three";
+import { Group, Mesh, ShaderMaterial, Quaternion, Vector3 } from "three";
+import type { RapierRigidBody } from "@react-three/rapier";
+import { bowThrusterEffectiveness, type SimulationEnvironment } from "@/lib/sim/boat-physics";
+import { liveRigidBody } from "@/lib/sim/rapier-utils";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
@@ -10,6 +13,8 @@ import type { TwinEngineState } from "@/hooks/useEngineState";
 
 type WashEffectsProps = {
   boat: BoatProfile;
+  bodyRef: MutableRefObject<RapierRigidBody | null>;
+  environment: SimulationEnvironment;
   controlsRef: MutableRefObject<GamepadSnapshot>;
   engineStateRef: MutableRefObject<TwinEngineState>;
   turboActive: boolean;
@@ -52,7 +57,7 @@ const washFragmentShader = `
     float churn = valueNoise(vUv * 7.0 + vec2(0.0, uTime * 1.6));
     float streaks = valueNoise(vUv * vec2(3.0, 14.0) + vec2(0.0, uTime * 2.4));
     float alpha =
-      smoothstep(1.0, 0.12, radial) *
+      (1.0 - smoothstep(0.12, 1.0, radial)) *
       (0.45 + 0.3 * churn + 0.25 * streaks) *
       uStrength;
 
@@ -60,7 +65,7 @@ const washFragmentShader = `
   }
 `;
 
-const WATER_LOCAL_Y = -0.82;
+const WATER_LOCAL_Y = -0.92;
 
 function useWashUniforms() {
   return useMemo(
@@ -74,10 +79,13 @@ function useWashUniforms() {
 
 export function WashEffects({
   boat,
+  bodyRef,
+  environment,
   controlsRef,
   engineStateRef,
   turboActive,
 }: WashEffectsProps) {
+  const flow = useMemo(() => ({ velocity: new Vector3(), rotation: new Quaternion() }), []);
   const portUniforms = useWashUniforms();
   const starboardUniforms = useWashUniforms();
   const bowUniforms = useWashUniforms();
@@ -94,10 +102,18 @@ export function WashEffects({
   const portTurboGroupRef = useRef<Group | null>(null);
   const starboardTurboGroupRef = useRef<Group | null>(null);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const time = state.clock.elapsedTime;
     const engines = engineStateRef.current;
-    const bowThruster = controlsRef.current.bowThruster;
+    const body = liveRigidBody(bodyRef);
+    let surge = 0;
+    if (body) {
+      const velocity = body.linvel();
+      const rotation = body.rotation();
+      flow.rotation.set(rotation.x, rotation.y, rotation.z, rotation.w).invert();
+      surge = flow.velocity.set(velocity.x - environment.currentVelocity.x, 0, velocity.z - environment.currentVelocity.z).applyQuaternion(flow.rotation).z;
+    }
+    const bowThruster = boat.maxBowThrusterForceN > 0 ? controlsRef.current.bowThruster * bowThrusterEffectiveness(surge) : 0;
     const sternZ = -boat.lengthM * 0.5;
 
     const updateEngineWash = (
@@ -111,14 +127,15 @@ export function WashEffects({
       }
 
       const magnitude = Math.min(1, Math.abs(throttle));
-      material.uniforms.uStrength.value = magnitude * (turboActive ? 1.2 : 0.85);
+      material.uniforms.uStrength.value = (magnitude > 0.005 ? 0.12 + magnitude * 0.58 : 0) * (turboActive ? 1.4 : 1);
+      group.visible = magnitude > 0.005;
       material.uniforms.uTime.value = time;
 
       if (throttle >= 0) {
         // Ahead: wash streams aft of the transom, longer with more power.
         const length = turboActive
           ? boat.lengthM * 3.8
-          : 3 + magnitude * 9;
+          : 1.8 + magnitude * 5 + Math.max(0, surge) * 0.35;
         group.position.set(lateralX, WATER_LOCAL_Y, sternZ - length * 0.42);
         group.scale.set(
           turboActive ? boat.beamM * 0.9 : 1.6 + magnitude * 0.9,
@@ -163,7 +180,7 @@ export function WashEffects({
         WATER_LOCAL_Y,
         boat.bowThrusterLongitudinalOffsetM,
       );
-      bowMesh.scale.set(reach, 1, 1.8 + magnitude * 0.7);
+      bowMesh.scale.set(reach, 1.8 + magnitude * 0.7, 1);
       bowMesh.visible = magnitude > 0.02;
     }
 
@@ -179,7 +196,7 @@ export function WashEffects({
       const wakeLength = boat.lengthM * 4.6;
       const strength = turboActive ? 1 : 0;
       material.uniforms.uStrength.value +=
-        (strength - material.uniforms.uStrength.value) * 0.12;
+        (strength - material.uniforms.uStrength.value) * (1 - Math.exp(-Math.min(delta, 0.1) * 7));
       material.uniforms.uTime.value = time * 1.8;
       group.visible = material.uniforms.uStrength.value > 0.01;
       group.position.set(

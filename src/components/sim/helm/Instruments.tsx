@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { rpmFromThrottle, type EngineGear } from "@/lib/sim/engine-dynamics";
+
 import type { HelmTheme } from "@/lib/boats/helm-theme";
 
 import { PanelLabel, Readout, Well } from "./Panel";
@@ -15,20 +17,13 @@ const TACH_MAX_RPM = 2400;
 const TACH_IDLE_RPM = 600;
 const TACH_REDLINE_RPM = 2150;
 
-export function rpmFromThrottle(throttle: number): number {
-  const sign = Math.sign(throttle);
-  const magnitude = Math.abs(throttle);
-  const shaped = 0.22 * magnitude + 0.78 * magnitude ** 1.6;
-  const ahead = 650 + shaped * (TACH_MAX_RPM - 650);
-  const astern = 600 + shaped * (1400 - 600);
-  return sign >= 0 ? ahead : astern;
-}
-
 type TachProps = {
   label: string;
   rpm: number;
   /** -1..1 lever demand, drawn as the commanded mark. */
   demand: number;
+  gear: EngineGear;
+  shifting: boolean;
   running: boolean;
   starting: boolean;
   armed: boolean;
@@ -44,6 +39,8 @@ export function Tachometer({
   label,
   rpm,
   demand,
+  gear,
+  shifting,
   running,
   starting,
   armed,
@@ -61,7 +58,7 @@ export function Tachometer({
           : "var(--helm-text-dim)";
 
   return (
-    <Well className="px-2 pb-2 pt-1.5">
+    <Well className="px-2 pb-1.5 pt-1">
       <button
         type="button"
         onClick={onToggle}
@@ -69,9 +66,9 @@ export function Tachometer({
         className="flex w-full items-center justify-between gap-2 rounded px-0.5 py-0.5 transition hover:bg-white/5"
         title={running ? "Shut this engine down" : "Engine master on"}
       >
-        <PanelLabel className="!text-[0.5rem]">{label}</PanelLabel>
+        <PanelLabel className="!text-[0.62rem]">{label}</PanelLabel>
         <span
-          className="flex items-center gap-1 text-[0.46rem] leading-none"
+          className="flex items-center gap-1 text-[0.58rem] leading-none"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.18em",
@@ -90,6 +87,10 @@ export function Tachometer({
         </span>
       </button>
 
+      <div className="mt-0.5 flex items-center justify-between px-0.5 text-[0.58rem] uppercase tracking-widest" style={{ color: shifting ? "var(--helm-warn)" : "var(--helm-text-dim)" }}>
+        <span>Gear</span>
+        <span>{!running ? "—" : shifting && demand !== 0 ? "Shifting" : gear > 0 ? "Ahead" : gear < 0 ? "Astern" : "Neutral"}</span>
+      </div>
       {instrument === "analog" ? (
         <AnalogTach rpm={rpm} demand={demand} live={running || starting} />
       ) : (
@@ -108,14 +109,14 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
   const redlineSegment = Math.round(
     ((TACH_REDLINE_RPM - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)) * segments,
   );
-  const demandFraction = Math.min(1, Math.max(0, Math.abs(demand)));
+  const demandFraction = Math.min(1, Math.max(0, (rpmFromThrottle(demand) - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)));
 
   return (
-    <div className="mt-1.5">
+    <div className="mt-1">
       <div className="flex items-baseline justify-between">
         <Readout value={live ? Math.round(rpm) : "----"} size="lg" tone={live ? "readout" : "text"} />
         <span
-          className="text-[0.48rem] leading-none"
+          className="text-[0.6rem] leading-none"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.2em",
@@ -127,7 +128,7 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
         </span>
       </div>
 
-      <div className="mt-1.5 flex h-[0.55rem] items-stretch gap-[2px]">
+      <div className="mt-1 flex h-[0.55rem] items-stretch gap-[2px]">
         {Array.from({ length: segments }, (_, index) => {
           const isLit = index < lit;
           const isRed = index >= redlineSegment;
@@ -146,7 +147,7 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
         })}
       </div>
 
-      <div className="relative mt-1 h-[0.3rem]">
+      <div className="relative mt-0.5 h-[0.3rem]">
         <span
           className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2"
           style={{ background: "var(--helm-inset-edge)" }}
@@ -161,8 +162,8 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
         />
       </div>
 
-      <div className="mt-1 flex items-center justify-between">
-        <PanelLabel dim className="!text-[0.45rem]">
+      <div className="mt-0.5 flex items-center justify-between">
+        <PanelLabel dim className="!text-[0.57rem]">
           {demand < -0.02 ? "astern" : demand > 0.02 ? "ahead" : "neutral"}
         </PanelLabel>
         <Readout value={formatSigned(demand)} size="sm" tone="text" />
@@ -240,7 +241,7 @@ function AnalogTach({ rpm, demand, live }: { rpm: number; demand: number; live: 
         </text>
       </svg>
       <div className="mt-0.5 flex items-center justify-between">
-        <PanelLabel dim className="!text-[0.45rem]">
+        <PanelLabel dim className="!text-[0.57rem]">
           {demand < -0.02 ? "astern" : demand > 0.02 ? "ahead" : "neutral"}
         </PanelLabel>
         <Readout value={formatSigned(demand)} size="sm" tone="text" />
@@ -468,14 +469,14 @@ export function FlowDial({
       </svg>
 
       <div className="min-w-0 leading-tight">
-        <PanelLabel dim className="!text-[0.5rem]">
+        <PanelLabel dim className="!text-[0.62rem]">
           {label}
         </PanelLabel>
         <div className="mt-0.5">
           <Readout value={knots.toFixed(1)} unit="kn" size="sm" tone="text" />
         </div>
         <span
-          className="block text-[0.5rem] leading-none"
+          className="block text-[0.62rem] leading-none"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.12em",
@@ -508,15 +509,17 @@ export function DepthSounder({
         : underKeel < 6
           ? "warn"
           : "readout";
+  const displayedDepth =
+    feet === undefined ? "--" : feet < 10 ? feet.toFixed(1) : Math.round(feet);
 
   return (
     <Well className={compact ? "px-2 py-1.5" : "px-2.5 py-2"}>
       <div className="flex items-baseline justify-between gap-2">
-        <PanelLabel dim className="!text-[0.5rem]">
+        <PanelLabel dim className="!text-[0.62rem]">
           Depth
         </PanelLabel>
         <Readout
-          value={feet === undefined ? "--" : Math.round(feet)}
+          value={displayedDepth}
           unit="ft"
           size={compact ? "sm" : "md"}
           tone={tone}
@@ -524,7 +527,7 @@ export function DepthSounder({
       </div>
       {!compact ? (
         <div className="mt-1 flex items-baseline justify-between gap-2">
-          <PanelLabel dim className="!text-[0.45rem]">
+          <PanelLabel dim className="!text-[0.57rem]">
             Under keel
           </PanelLabel>
           <Readout

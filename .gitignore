@@ -51,3 +51,4 @@ __pycache__/
 
 # d3k writes this while it has a browser attached
 .d3k-browser.pid
+.env*.local

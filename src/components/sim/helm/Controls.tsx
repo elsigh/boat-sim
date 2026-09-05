@@ -22,9 +22,9 @@ type ButtonProps = {
 };
 
 const SIZES = {
-  sm: "px-2 py-1 text-[0.55rem]",
-  md: "px-3 py-1.5 text-[0.62rem]",
-  lg: "px-4 py-2.5 text-[0.75rem]",
+  sm: "px-2 py-1 text-[0.67rem]",
+  md: "px-3 py-1.5 text-[0.74rem]",
+  lg: "px-4 py-2.5 text-[0.87rem]",
 } as const;
 
 export function HelmButton({
@@ -49,7 +49,7 @@ export function HelmButton({
       disabled={disabled}
       onPointerDown={stopPointer}
       onClick={onClick}
-      className={`relative rounded-md leading-none transition disabled:cursor-not-allowed disabled:opacity-45 ${SIZES[size]} ${className}`}
+      className={`relative rounded-md leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--helm-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-45 ${SIZES[size]} ${className}`}
       style={{
         fontFamily: "var(--helm-font-label)",
         fontWeight: "var(--helm-label-weight)" as unknown as number,
@@ -91,7 +91,7 @@ export function HelmActionButton({
       disabled={disabled}
       onPointerDown={stopPointer}
       onClick={onClick}
-      className={`relative w-full overflow-hidden rounded-lg px-4 py-3 text-[0.8rem] leading-none transition disabled:cursor-wait disabled:opacity-60 ${className}`}
+      className={`relative w-full overflow-hidden rounded-lg px-4 py-3 text-[0.92rem] leading-none transition disabled:cursor-wait disabled:opacity-60 ${className}`}
       style={{
         fontFamily: "var(--helm-font-label)",
         fontWeight: 700,
@@ -126,7 +126,7 @@ export function HelmSelect({
     <label className={`block ${className}`}>
       {label ? (
         <span
-          className="block text-[0.55rem] leading-none"
+          className="block text-[0.67rem] leading-none"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.2em",
@@ -141,7 +141,7 @@ export function HelmSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onPointerDown={stopPointer}
-        className="mt-1 w-full rounded-md px-2.5 py-2 text-[0.72rem] outline-none"
+        className="mt-1 w-full rounded-md px-2.5 py-2 text-[0.84rem] outline-none"
         style={{
           fontFamily: "var(--helm-font-body)",
           color: "var(--helm-text)",
@@ -158,7 +158,7 @@ export function HelmSelect({
       </select>
       {hint ? (
         <span
-          className="mt-1 block text-[0.6rem] leading-snug"
+          className="mt-1 block text-[0.72rem] leading-snug"
           style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-body)" }}
         >
           {hint}

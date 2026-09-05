@@ -119,12 +119,16 @@ export const BOAT_CATALOG: BoatProfile[] = [
     engineLongitudinalOffsetM: -(52 * 0.3048) * 0.34,
     bowThrusterLongitudinalOffsetM: (52 * 0.3048) * 0.37,
     windCenterLongitudinalOffsetM: (52 * 0.3048) * 0.08,
-    maxForwardThrustN: 7_600,
+    // Calibrated from the real boat's observed cruise point: roughly 12 kn
+    // at 1,500–1,550 RPM, while retaining the published ~20 kn full-power
+    // speed. The steeper curve keeps near-idle docking thrust essentially
+    // unchanged instead of making the boat leap forward in close quarters.
+    maxForwardThrustN: 54_800,
     maxReverseThrustN: 6_800,
     maxBowThrusterForceN: 2_600,
     maxPropWalkForceN: 680,
-    throttleExponent: 1.7,
-    throttleLinearBlend: 0.18,
+    throttleExponent: 2.704,
+    throttleLinearBlend: 0.0285,
     waterLinearDragSurge: 720,
     waterLinearDragSway: 18_000,
     waterDragSurge: 250,

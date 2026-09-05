@@ -7,7 +7,7 @@ import {
   CylinderCollider,
   RigidBody,
 } from "@react-three/rapier";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useLayoutEffect, useMemo, useRef } from "react";
 import {
   Color,
   InstancedMesh,
@@ -344,7 +344,8 @@ function BerthMarker({
   );
 }
 
-export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
+// Telemetry changes ten times a second; the harbour and its colliders do not.
+export const Marina = memo(function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
   const chart = useMemo(() => getWorldChart(layout.chartId ?? layout.id), [layout]);
 
   const docks = useMemo(() => sceneDocks(layout), [layout]);
@@ -446,4 +447,4 @@ export function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
       ))}
     </group>
   );
-}
+});

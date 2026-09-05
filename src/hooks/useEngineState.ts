@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
+import { createEngineDynamics, normalizeThrottle, stepEngineDynamics, type EngineGear } from "@/lib/sim/engine-dynamics";
 
 export type EngineChannelState = {
   masterOn: boolean;
@@ -10,6 +11,9 @@ export type EngineChannelState = {
   running: boolean;
   demandThrottle: number;
   effectiveThrottle: number;
+  rpm: number;
+  gear: EngineGear;
+  shifting: boolean;
 };
 
 export type TwinEngineState = {
@@ -42,7 +46,7 @@ type RuntimeAction =
       engine: "port" | "starboard";
     }
   | {
-      type: "start-complete";
+      type: "start-complete" | "cancel-start";
       engine: "port" | "starboard";
     };
 
@@ -55,21 +59,6 @@ const DEFAULT_RUNTIME_STATE: RuntimeState = {
 
 const PORT_STARTUP_MS = 1100;
 const STARBOARD_STARTUP_MS = 1250;
-const THROTTLE_NEUTRAL_DEADBAND = 0.045;
-const SAME_DIRECTION_MATCH_THRESHOLD = 0.14;
-const FORWARD_DIFFERENTIAL_RETENTION = 0.38;
-const REVERSE_DIFFERENTIAL_RETENTION = 0.2;
-// Engines answer the levers near-instantly — diesels rev in well under a
-// second, and the boat's sluggishness comes from hull mass and water drag in
-// the physics model, not from lagging the engine output. The slower
-// through-neutral rate is the one mechanical beat that remains: the gearbox
-// shifting between ahead and astern.
-const AHEAD_POWER_RATE_PER_SECOND = 3.2;
-const ASTERN_POWER_RATE_PER_SECOND = 3.2;
-const NEUTRAL_POWER_RATE_PER_SECOND = 4.5;
-const REVERSING_POWER_RATE_PER_SECOND = 2.4;
-const POWER_SETTLE_EPSILON = 0.002;
-
 function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeState {
   switch (action.type) {
     case "sync-master":
@@ -99,6 +88,8 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
         ...state,
         starboardStarting: true,
       };
+    case "cancel-start":
+      return action.engine === "port" ? { ...state, portStarting: false } : { ...state, starboardStarting: false };
     case "start-complete":
       if (action.engine === "port") {
         return {
@@ -118,118 +109,48 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
   }
 }
 
-function clampUnit(value: number) {
-  return Math.max(-1, Math.min(1, value));
-}
-
-function moveToward(current: number, target: number, maxDelta: number) {
-  if (Math.abs(target - current) <= maxDelta) {
-    return target;
-  }
-
-  return current + Math.sign(target - current) * maxDelta;
-}
-
-function slewEnginePower(current: number, target: number, deltaSeconds: number) {
-  if (Math.abs(target) <= POWER_SETTLE_EPSILON) {
-    return moveToward(current, 0, NEUTRAL_POWER_RATE_PER_SECOND * deltaSeconds);
-  }
-
-  if (Math.abs(current) > POWER_SETTLE_EPSILON && Math.sign(current) !== Math.sign(target)) {
-    return moveToward(current, 0, REVERSING_POWER_RATE_PER_SECOND * deltaSeconds);
-  }
-
-  const rate =
-    Math.abs(target) < Math.abs(current)
-      ? NEUTRAL_POWER_RATE_PER_SECOND
-      : target < 0
-        ? ASTERN_POWER_RATE_PER_SECOND
-        : AHEAD_POWER_RATE_PER_SECOND;
-
-  return moveToward(current, target, rate * deltaSeconds);
-}
-
-function applyThrottleForgiveness(value: number) {
-  if (Math.abs(value) <= THROTTLE_NEUTRAL_DEADBAND) {
-    return 0;
-  }
-
-  const trimmedMagnitude =
-    (Math.abs(value) - THROTTLE_NEUTRAL_DEADBAND) / (1 - THROTTLE_NEUTRAL_DEADBAND);
-  return clampUnit(Math.sign(value) * trimmedMagnitude);
-}
-
-function stabilizeTwinThrottlePair(port: number, starboard: number) {
-  const trimmedPort = applyThrottleForgiveness(port);
-  const trimmedStarboard = applyThrottleForgiveness(starboard);
-  const sameDirection =
-    trimmedPort !== 0 &&
-    trimmedStarboard !== 0 &&
-    Math.sign(trimmedPort) === Math.sign(trimmedStarboard);
-
-  if (!sameDirection) {
-    return {
-      port: trimmedPort,
-      starboard: trimmedStarboard,
-    };
-  }
-
-  const average = (trimmedPort + trimmedStarboard) * 0.5;
-  const differential = trimmedPort - trimmedStarboard;
-
-  if (Math.abs(differential) <= SAME_DIRECTION_MATCH_THRESHOLD) {
-    return {
-      port: average,
-      starboard: average,
-    };
-  }
-
-  const retention =
-    average < 0 ? REVERSE_DIFFERENTIAL_RETENTION : FORWARD_DIFFERENTIAL_RETENTION;
-  const softenedDifferential = differential * retention * 0.5;
-
-  return {
-    port: clampUnit(average + softenedDifferential),
-    starboard: clampUnit(average - softenedDifferential),
-  };
-}
-
 export function useEngineState(
   controls: GamepadSnapshot,
   overrides: EngineControlOverrides = {},
 ): TwinEngineState {
   const [runtimeState, dispatch] = useReducer(runtimeReducer, DEFAULT_RUNTIME_STATE);
-  const [effectiveThrottle, setEffectiveThrottle] = useState({ port: 0, starboard: 0 });
+  const [propulsion, setPropulsion] = useState(() => ({ port: createEngineDynamics(), starboard: createEngineDynamics() }));
   const previousIgnitionPressedRef = useRef(false);
   const previousIgnitionRequestIdRef = useRef(overrides.ignitionRequestId ?? 0);
   const portTimerRef = useRef<number | null>(null);
   const starboardTimerRef = useRef<number | null>(null);
-  const targetThrottleRef = useRef({ port: 0, starboard: 0 });
+  const targetThrottleRef = useRef({ port: 0, starboard: 0, portRunning: false, starboardRunning: false, portStarting: false, starboardStarting: false });
 
   const portMasterOn = Boolean(overrides.portMasterOn) || (controls.rawButtons[2] ?? 0) > 0.5;
   const starboardMasterOn =
     Boolean(overrides.starboardMasterOn) || (controls.rawButtons[3] ?? 0) > 0.5;
   const ignitionPressed = (controls.rawButtons[7] ?? 0) > 0.5;
-  const stabilizedThrottle = useMemo(
-    () => stabilizeTwinThrottlePair(controls.portThrottle, controls.starboardThrottle),
+  const throttleDemand = useMemo(
+    () => ({ port: normalizeThrottle(controls.portThrottle), starboard: normalizeThrottle(controls.starboardThrottle) }),
     [controls.portThrottle, controls.starboardThrottle],
   );
 
   useEffect(() => {
     targetThrottleRef.current = {
-      port: portMasterOn && runtimeState.portRunning ? stabilizedThrottle.port : 0,
+      portRunning: portMasterOn && runtimeState.portRunning,
+      starboardRunning: starboardMasterOn && runtimeState.starboardRunning,
+      portStarting: runtimeState.portStarting,
+      starboardStarting: runtimeState.starboardStarting,
+      port: portMasterOn && runtimeState.portRunning ? throttleDemand.port : 0,
       starboard:
         starboardMasterOn && runtimeState.starboardRunning
-          ? stabilizedThrottle.starboard
+          ? throttleDemand.starboard
           : 0,
     };
   }, [
     portMasterOn,
     runtimeState.portRunning,
     runtimeState.starboardRunning,
+    runtimeState.portStarting,
+    runtimeState.starboardStarting,
     starboardMasterOn,
-    stabilizedThrottle.port,
-    stabilizedThrottle.starboard,
+    throttleDemand.port,
+    throttleDemand.starboard,
   ]);
 
   useEffect(() => {
@@ -241,14 +162,17 @@ export function useEngineState(
       const deltaSeconds = Math.min(0.08, (now - lastFrameAt) / 1000);
       lastFrameAt = now;
 
-      setEffectiveThrottle((current) => {
+      setPropulsion((current) => {
         const target = targetThrottleRef.current;
         const next = {
-          port: slewEnginePower(current.port, target.port, deltaSeconds),
-          starboard: slewEnginePower(current.starboard, target.starboard, deltaSeconds),
+          port: stepEngineDynamics(current.port, target.port, target.portRunning, target.portStarting, deltaSeconds),
+          starboard: stepEngineDynamics(current.starboard, target.starboard, target.starboardRunning, target.starboardStarting, deltaSeconds),
         };
 
-        if (next.port === current.port && next.starboard === current.starboard) {
+        if (["port", "starboard"].every((key) => {
+          const side = key as "port" | "starboard";
+          return next[side].effectiveThrottle === current[side].effectiveThrottle && next[side].gear === current[side].gear && next[side].shiftRemaining === current[side].shiftRemaining && Math.abs(next[side].rpm - current[side].rpm) < 0.1;
+        })) {
           return current;
         }
 
@@ -288,6 +212,19 @@ export function useEngineState(
   }, [portMasterOn, starboardMasterOn]);
 
   useEffect(() => {
+    if (runtimeState.portStarting && throttleDemand.port !== 0) {
+      if (portTimerRef.current !== null) window.clearTimeout(portTimerRef.current);
+      portTimerRef.current = null;
+      dispatch({ type: "cancel-start", engine: "port" });
+    }
+    if (runtimeState.starboardStarting && throttleDemand.starboard !== 0) {
+      if (starboardTimerRef.current !== null) window.clearTimeout(starboardTimerRef.current);
+      starboardTimerRef.current = null;
+      dispatch({ type: "cancel-start", engine: "starboard" });
+    }
+  }, [runtimeState.portStarting, runtimeState.starboardStarting, throttleDemand.port, throttleDemand.starboard]);
+
+  useEffect(() => {
     const ignitionRequestId = overrides.ignitionRequestId ?? 0;
     const manualIgnitionRequest =
       ignitionRequestId !== previousIgnitionRequestIdRef.current;
@@ -301,7 +238,7 @@ export function useEngineState(
       return;
     }
 
-    if (portMasterOn) {
+    if (portMasterOn && throttleDemand.port === 0) {
       dispatch({ type: "start-request", engine: "port" });
 
       if (!runtimeState.portRunning && !runtimeState.portStarting) {
@@ -316,7 +253,7 @@ export function useEngineState(
       }
     }
 
-    if (starboardMasterOn) {
+    if (starboardMasterOn && throttleDemand.starboard === 0) {
       dispatch({ type: "start-request", engine: "starboard" });
 
       if (!runtimeState.starboardRunning && !runtimeState.starboardStarting) {
@@ -333,6 +270,8 @@ export function useEngineState(
   }, [
     ignitionPressed,
     overrides.ignitionRequestId,
+    throttleDemand.port,
+    throttleDemand.starboard,
     portMasterOn,
     runtimeState.portRunning,
     runtimeState.portStarting,
@@ -360,20 +299,26 @@ export function useEngineState(
         masterOn: portMasterOn,
         starting: runtimeState.portStarting,
         running: portMasterOn && runtimeState.portRunning,
-        demandThrottle: stabilizedThrottle.port,
-        effectiveThrottle: effectiveThrottle.port,
+        demandThrottle: throttleDemand.port,
+        effectiveThrottle: portMasterOn && runtimeState.portRunning ? propulsion.port.effectiveThrottle : 0,
+        rpm: propulsion.port.rpm,
+        gear: propulsion.port.gear,
+        shifting: propulsion.port.shiftRemaining > 0,
       },
       starboard: {
         masterOn: starboardMasterOn,
         starting: runtimeState.starboardStarting,
         running: starboardMasterOn && runtimeState.starboardRunning,
-        demandThrottle: stabilizedThrottle.starboard,
-        effectiveThrottle: effectiveThrottle.starboard,
+        demandThrottle: throttleDemand.starboard,
+        effectiveThrottle: starboardMasterOn && runtimeState.starboardRunning ? propulsion.starboard.effectiveThrottle : 0,
+        rpm: propulsion.starboard.rpm,
+        gear: propulsion.starboard.gear,
+        shifting: propulsion.starboard.shiftRemaining > 0,
       },
     }),
     [
-      effectiveThrottle.port,
-      effectiveThrottle.starboard,
+      propulsion.port,
+      propulsion.starboard,
       ignitionPressed,
       portMasterOn,
       runtimeState.portStarting,
@@ -381,8 +326,8 @@ export function useEngineState(
       runtimeState.portRunning,
       runtimeState.starboardRunning,
       starboardMasterOn,
-      stabilizedThrottle.port,
-      stabilizedThrottle.starboard,
+      throttleDemand.port,
+      throttleDemand.starboard,
     ],
   );
 }

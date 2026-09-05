@@ -3,8 +3,9 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChartData } from "@/lib/charts";
-import { chartDepthMeters, chartToGeo, geoToChart } from "@/lib/charts";
-import { type ChartMode, type ChartPalette, chartPalette } from "@/lib/charts/palette";
+import { chartToGeo, geoToChart } from "@/lib/charts";
+import { NAVIGATION_CAUTIONS } from "@/lib/charts/cautions";
+import { type ChartMode, chartPalette } from "@/lib/charts/palette";
 import { REGION_CHART, regionToScene, regionTransform } from "@/lib/charts/region";
 import type { HelmTheme } from "@/lib/boats/helm-theme";
 import type { Berth, MarinaLayout, Vec2 } from "@/lib/marinas/types";
@@ -14,7 +15,8 @@ import type { ImportedTrack } from "@/lib/tracks/types";
 
 import type { TrafficTarget } from "../MarinaTraffic";
 
-import { HelmButton } from "./Controls";
+import { PlotterIconButton } from "./PlotterControls";
+import { useWaterRasters } from "./useWaterRasters";
 import { PanelLabel } from "./Panel";
 
 // A chart plotter that draws the real survey: NOAA depths shaded from a raster,
@@ -36,6 +38,7 @@ const METRES_PER_FOOT = 0.3048;
  * route, or an AIS target in either colour mode.
  */
 const IMPORTED_TRACK = "#ff8c2b";
+const CAUTION_COLOR = "#ff7a22";
 
 /**
  * Half the short axis of the view, in metres. Continuous so the wheel can
@@ -52,6 +55,8 @@ const REGION_LABEL_RANGE_M = 2200;
 const MIN_RANGE_M = 60;
 /** One wheel notch is about a sixth of a range step. */
 const WHEEL_ZOOM_RATE = 0.0016;
+/** Wait until a trackpad gesture settles before syncing range to the HUD. */
+const WHEEL_COMMIT_DELAY_MS = 140;
 
 type ChartPlotterProps = {
   chart: ChartData;
@@ -145,92 +150,6 @@ function clampAxis(centre: number, halfVisible: number, min: number, max: number
 /** Render world (+x west) -> chart frame (+x east). */
 function fromWorld(x: number, z: number): [number, number] {
   return [-x, z];
-}
-
-/**
- * The shaded depth areas, painted once into an offscreen canvas and handed to
- * the SVG as an <image>.
- *
- * Built in an effect rather than during render, and this matters: the canvas
- * API doesn't exist on the server, so computing it inline made the server
- * render nothing and the first client render an <image>. React calls that a
- * hydration mismatch, and in dev that throws and takes the whole app down with
- * it — a blank page, while the production build silently recovered. Returning
- * null until after mount means both sides agree.
- */
-function useWaterRaster(chart: ChartData, palette: ChartPalette, safeDepthM: number) {
-  const [href, setHref] = useState<string | null>(null);
-
-  useEffect(() => {
-    const { cols, rows } = chart.depth;
-    const canvas = document.createElement("canvas");
-    canvas.width = cols;
-    canvas.height = rows;
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      setHref(null);
-      return;
-    }
-
-    const image = context.createImageData(cols, rows);
-    const bands = palette.depthBands.map(hexToRgb);
-    const lastBand = bands.length - 1;
-
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        const x = -chart.halfWidthM + (col + 0.5) * chart.depth.cellXM;
-        const z = chart.halfHeightM - (row + 0.5) * chart.depth.cellZM;
-        const depth = chartDepthMeters(chart, x, z);
-        const index = (row * cols + col) * 4;
-
-        if (depth <= 0) {
-          image.data[index + 3] = 0;
-          continue;
-        }
-
-        // Discrete bands, not a ramp, with the thresholds scaled off this
-        // boat's safe depth — that's what "shallow water shading" means on a
-        // plotter, and it's why a Grand Banks and a bowrider see different
-        // charts of the same harbour.
-        const band =
-          depth < safeDepthM
-            ? 0
-            : depth < safeDepthM * 2.5
-              ? 1
-              : depth < safeDepthM * 6
-                ? 2
-                : 3;
-        const [r, g, b] = bands[Math.min(lastBand, band)];
-
-        image.data[index] = r;
-        image.data[index + 1] = g;
-        image.data[index + 2] = b;
-        image.data[index + 3] = 255;
-      }
-    }
-
-    context.putImageData(image, 0, 0);
-    setHref(canvas.toDataURL("image/png"));
-  }, [chart, palette, safeDepthM]);
-
-  return href;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const clean = hex.replace("#", "");
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : clean;
-  return [
-    parseInt(full.slice(0, 2), 16),
-    parseInt(full.slice(2, 4), 16),
-    parseInt(full.slice(4, 6), 16),
-  ];
 }
 
 function ringPath(points: Vec2[] | ReadonlyArray<readonly [number, number]>) {
@@ -332,7 +251,7 @@ export function ChartPlotter({
   onCollapse,
 }: ChartPlotterProps) {
   const palette = chartPalette(mode);
-  const raster = useWaterRaster(chart, palette, safeDepthM);
+  const raster = useWaterRasters(chart, safeDepthM)?.[mode] ?? null;
   const docks = useMemo(() => sceneDocks(layout), [layout]);
 
   const boatChart = useMemo(
@@ -343,11 +262,19 @@ export function ChartPlotter({
     () => (berth ? fromWorld(berth.center[0], berth.center[1]) : null),
     [berth],
   );
+  const cautions = useMemo(
+    () =>
+      NAVIGATION_CAUTIONS.filter((caution) => caution.chartIds.includes(chart.id)).map((caution) => {
+        const [x, z] = geoToChart(chart, caution.lat, caution.lon);
+        return { ...caution, x, z };
+      }),
+    [chart],
+  );
   // The regional basemap sits under the harbour chart so that dragging
   // offshore shows the San Juans rather than a grey void. It lives in its own
   // frame about its own origin; one affine puts it in this chart's frame.
   const region = useMemo(() => regionTransform(chart), [chart]);
-  const regionRaster = useWaterRaster(REGION_CHART, palette, safeDepthM);
+  const regionRaster = useWaterRasters(REGION_CHART, safeDepthM)?.[mode] ?? null;
 
   const { ref: boxRef, box } = usePlotterBox();
   const rotation = northUp ? 0 : -headingDeg;
@@ -367,6 +294,7 @@ export function ChartPlotter({
   const [panCentre, setPanCentre] = useState<{ x: number; z: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ pointerId: number; px: number; py: number } | null>(null);
+  const [renderedRange, setRenderedRange] = useState(rangeM);
 
   // Everything there is to look at: the surveyed window, the regional
   // basemap under it, and an imported track if one is loaded. Both zoom and
@@ -400,7 +328,7 @@ export function ChartPlotter({
       ((contentBounds.maxZ - contentBounds.minZ) / 2) * (shortSide / Math.max(1, box.h)),
     ),
   );
-  const effectiveRange = Math.min(rangeM, maxRange);
+  const effectiveRange = Math.min(renderedRange, maxRange);
   const scale = Math.min(box.w, box.h) / (effectiveRange * 2);
 
   const halfVisibleX = box.w / 2 / scale;
@@ -442,13 +370,29 @@ export function ChartPlotter({
    * +/- buttons, fit-track, a new harbour).
    */
   const rangeRef = useRef(effectiveRange);
+  const renderedRangeRef = useRef(effectiveRange);
+  const wheelFrameRef = useRef<number | null>(null);
+  const wheelCommitTimerRef = useRef<number | null>(null);
+  const pendingWheelRef = useRef<{
+    from: number;
+    next: number;
+    clientX: number;
+    clientY: number;
+    target: HTMLElement;
+  } | null>(null);
 
   useEffect(() => {
-    rangeRef.current = effectiveRange;
-  }, [effectiveRange]);
+    const next = Math.min(maxRange, Math.max(MIN_RANGE_M, rangeM));
+    rangeRef.current = next;
+    renderedRangeRef.current = next;
+    setRenderedRange(next);
+  }, [maxRange, rangeM]);
 
   const handleWheel = useRef<(event: WheelEvent) => void>(() => {});
   handleWheel.current = (event: WheelEvent) => {
+    // The native listener runs before React's delegated drawer handlers.
+    // Let the library scroll without zooming the chart underneath it.
+    if (event.target instanceof Element && event.target.closest("[data-plotter-overlay]")) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -464,26 +408,62 @@ export function ChartPlotter({
 
     rangeRef.current = next;
 
-    // Following the boat means the boat is the centre, so zoom about it. Once
-    // you've panned away there's no such anchor, so zoom about the cursor.
-    if (panCentre) {
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const dpx = event.clientX - rect.left - box.w / 2;
-      const dpy = event.clientY - rect.top - box.h / 2;
-      const fromScale = Math.min(box.w, box.h) / (from * 2);
-      const before = screenToChartDelta(dpx, dpy, fromScale);
-      const nextScale = Math.min(box.w, box.h) / (next * 2);
-      const after = screenToChartDelta(dpx, dpy, nextScale);
+    const target = event.currentTarget as HTMLElement;
+    const pending = pendingWheelRef.current;
+    pendingWheelRef.current = pending
+      ? { ...pending, next, clientX: event.clientX, clientY: event.clientY, target }
+      : {
+          from: renderedRangeRef.current,
+          next,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          target,
+        };
 
-      setPanCentre(
-        clampCentre({
-          x: centre.x + before.x - after.x,
-          z: centre.z + before.z - after.z,
-        }),
-      );
+    // Trackpads can deliver several wheel events in one display frame. Fold
+    // them into one plotter render instead of making React chase every event.
+    if (wheelFrameRef.current === null) {
+      wheelFrameRef.current = window.requestAnimationFrame(() => {
+        wheelFrameRef.current = null;
+        const update = pendingWheelRef.current;
+        pendingWheelRef.current = null;
+
+        if (!update) {
+          return;
+        }
+
+        renderedRangeRef.current = update.next;
+        setRenderedRange(update.next);
+
+        // Following the boat means the boat is the centre, so zoom about it.
+        // Once panned away, preserve the chart point under the cursor.
+        if (panCentre) {
+          const rect = update.target.getBoundingClientRect();
+          const dpx = update.clientX - rect.left - box.w / 2;
+          const dpy = update.clientY - rect.top - box.h / 2;
+          const fromScale = Math.min(box.w, box.h) / (update.from * 2);
+          const before = screenToChartDelta(dpx, dpy, fromScale);
+          const nextScale = Math.min(box.w, box.h) / (update.next * 2);
+          const after = screenToChartDelta(dpx, dpy, nextScale);
+
+          setPanCentre(
+            clampCentre({
+              x: centre.x + before.x - after.x,
+              z: centre.z + before.z - after.z,
+            }),
+          );
+        }
+      });
     }
 
-    onRangeChange(next);
+    if (wheelCommitTimerRef.current !== null) {
+      window.clearTimeout(wheelCommitTimerRef.current);
+    }
+
+    wheelCommitTimerRef.current = window.setTimeout(() => {
+      wheelCommitTimerRef.current = null;
+      onRangeChange(rangeRef.current);
+    }, WHEEL_COMMIT_DELAY_MS);
   };
 
   // A new harbour starts centred on the boat again.
@@ -512,7 +492,19 @@ export function ChartPlotter({
     // ignored and the page scrolls behind the chart. Bind it ourselves.
     const listener = (event: WheelEvent) => handleWheel.current(event);
     element.addEventListener("wheel", listener, { passive: false });
-    return () => element.removeEventListener("wheel", listener);
+    return () => {
+      element.removeEventListener("wheel", listener);
+
+      if (wheelFrameRef.current !== null) {
+        window.cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = null;
+      }
+
+      if (wheelCommitTimerRef.current !== null) {
+        window.clearTimeout(wheelCommitTimerRef.current);
+        wheelCommitTimerRef.current = null;
+      }
+    };
   }, [boxRef]);
 
   // Same maths as the SVG transform, for anything that must not rotate.
@@ -545,16 +537,11 @@ export function ChartPlotter({
   );
 
   /**
-   * The chart itself. Depends only on the survey and the colour table, so it
-   * is built once and React bails out of reconciling it while the transform
-   * above it changes 60 times a second.
+   * Path strings depend on the survey alone. Keep them separate from the
+   * coloured JSX so a palette switch doesn't rebuild thousands of vertices.
+   * The memoised subtrees also skip reconciliation while panning and zooming.
    */
-  /**
-   * The regional basemap, one <g> with its own affine so the region's own
-   * coordinates can be used verbatim. Memoised on the transform rather than
-   * on the view, so panning and zooming never rebuild it.
-   */
-  const regionGeometry = useMemo(() => {
+  const regionPaths = useMemo(() => {
     const contours: string[] = [];
 
     for (const contour of REGION_CHART.contours) {
@@ -570,7 +557,15 @@ export function ChartPlotter({
       (ring.hole ? holeRings : landRings).push(ringPath(ring.points));
     }
 
-    return (
+    return {
+      contours: joinPaths(contours),
+      land: joinPaths(landRings),
+      holes: joinPaths(holeRings),
+    };
+  }, []);
+
+  const regionGeometry = useMemo(
+    () => (
       <g
         transform={`translate(${region.offsetX} ${region.offsetZ}) scale(${region.scaleX} ${region.scaleZ})`}
       >
@@ -585,22 +580,22 @@ export function ChartPlotter({
         ) : null}
 
         <path
-          d={joinPaths(contours)}
+          d={regionPaths.contours}
           fill="none"
           stroke={palette.contourDeep}
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
         />
         <path
-          d={joinPaths(landRings)}
+          d={regionPaths.land}
           fill={palette.land}
           stroke={palette.landEdge}
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
         />
-        {holeRings.length > 0 ? (
+        {regionPaths.holes ? (
           <path
-            d={joinPaths(holeRings)}
+            d={regionPaths.holes}
             fill={palette.depthBands[palette.depthBands.length - 1]}
             stroke={palette.landEdge}
             strokeWidth="1"
@@ -608,10 +603,11 @@ export function ChartPlotter({
           />
         ) : null}
       </g>
-    );
-  }, [palette, region, regionRaster]);
+    ),
+    [palette, region, regionPaths, regionRaster],
+  );
 
-  const staticGeometry = useMemo(() => {
+  const chartPaths = useMemo(() => {
     const shallowContours: string[] = [];
     const deepContours: string[] = [];
 
@@ -635,7 +631,17 @@ export function ChartPlotter({
       return rectSubpath(dx, dz, dock.size[0], dock.size[1], dock.rotationDeg ?? 0);
     });
 
-    return (
+    return {
+      deep: joinPaths(deepContours),
+      shallow: joinPaths(shallowContours),
+      land: joinPaths(landRings),
+      holes: joinPaths(holeRings),
+      docks: joinPaths(dockShapes),
+    };
+  }, [chart, docks]);
+
+  const staticGeometry = useMemo(
+    () => (
       <>
         {/* Limit of the surveyed window. */}
         <rect
@@ -664,14 +670,14 @@ export function ChartPlotter({
 
         {/* Depth contour ladder, two paths rather than a hundred. */}
         <path
-          d={joinPaths(deepContours)}
+          d={chartPaths.deep}
           fill="none"
           stroke={palette.contourDeep}
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
         />
         <path
-          d={joinPaths(shallowContours)}
+          d={chartPaths.shallow}
           fill="none"
           stroke={palette.contour}
           strokeWidth="1.4"
@@ -680,16 +686,16 @@ export function ChartPlotter({
 
         {/* Land, then lagoons punched back out of it. */}
         <path
-          d={joinPaths(landRings)}
+          d={chartPaths.land}
           fill={palette.land}
           stroke={palette.landEdge}
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
           opacity={0.95}
         />
-        {holeRings.length > 0 ? (
+        {chartPaths.holes ? (
           <path
-            d={joinPaths(holeRings)}
+            d={chartPaths.holes}
             fill={palette.depthBands[0]}
             stroke={palette.landEdge}
             strokeWidth="1"
@@ -698,10 +704,11 @@ export function ChartPlotter({
         ) : null}
 
         {/* Piers, floats and breakwaters. */}
-        <path d={joinPaths(dockShapes)} fill={palette.structure} opacity={0.95} />
+        <path d={chartPaths.docks} fill={palette.structure} opacity={0.95} />
       </>
-    );
-  }, [chart, docks, palette, raster]);
+    ),
+    [chart, chartPaths, palette, raster],
+  );
 
   const geo = boatChart ? chartToGeo(chart, boatChart.x, boatChart.z) : null;
   const scaleBar = pickScaleBar(effectiveRange);
@@ -743,50 +750,44 @@ export function ChartPlotter({
   ]);
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-1.5">
+    <div className="@container flex flex-col">
+      <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-1.5">
         <PanelLabel>Plotter</PanelLabel>
-        <div className="flex items-center gap-1.5">
-          {geo ? (
-            <span
-              className="text-[0.55rem] leading-none"
-              style={{ fontFamily: "var(--helm-font-readout)", color: "var(--helm-text-dim)" }}
-            >
-              {geo.lat.toFixed(4)}°N {Math.abs(geo.lon).toFixed(4)}°W
-            </span>
-          ) : null}
+        {geo ? (
+          <span
+            className="ml-auto hidden text-right text-[0.62rem] leading-tight @[22rem]:block"
+            style={{ fontFamily: "var(--helm-font-readout)", color: "var(--helm-text-dim)" }}
+          >
+            {geo.lat.toFixed(4)}°N {Math.abs(geo.lon).toFixed(4)}°W
+          </span>
+        ) : null}
+        <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Plotter controls">
           {headerExtra}
-          <HelmButton
-            size="sm"
+          <PlotterIconButton
+            icon={mode === "day" ? "sun" : "moon"}
             onClick={() => onModeChange(mode === "day" ? "night" : "day")}
             title={mode === "day" ? "Switch to night colours" : "Switch to day colours"}
-            ariaLabel="Chart colours"
-          >
-            {mode === "day" ? "☀" : "☾"}
-          </HelmButton>
-          {panCentre ? (
-            <HelmButton
-              size="sm"
-              tone="accent"
-              active
-              onClick={() => setPanCentre(null)}
-              title="Recentre on the boat"
-            >
-              ⌖ Boat
-            </HelmButton>
-          ) : null}
-          <HelmButton size="sm" active={northUp} onClick={onToggleNorthUp} tone="accent">
-            {northUp ? "N↑" : "H↑"}
-          </HelmButton>
+            label="Chart colours"
+            pressed={mode === "night"}
+          />
+          <PlotterIconButton
+            icon="locate"
+            onClick={() => setPanCentre(null)}
+            label="Recentre on the boat"
+            title={following ? "Following the boat" : "Recentre on the boat"}
+            pressed={following}
+          />
+          <PlotterIconButton
+            icon={northUp ? "north" : "heading"}
+            onClick={onToggleNorthUp}
+            pressed={!northUp}
+            label={northUp ? "North-up chart. Switch to heading-up" : "Heading-up chart. Switch to north-up"}
+          />
           {onExpand ? (
-            <HelmButton size="sm" onClick={onExpand} ariaLabel="Expand plotter">
-              ⤢
-            </HelmButton>
+            <PlotterIconButton icon="expand" onClick={onExpand} label="Expand plotter" />
           ) : null}
           {onCollapse ? (
-            <HelmButton size="sm" onClick={onCollapse} ariaLabel="Close plotter">
-              ✕
-            </HelmButton>
+            <PlotterIconButton icon="collapse" onClick={onCollapse} label="Collapse plotter" />
           ) : null}
         </div>
       </div>
@@ -920,6 +921,29 @@ export function ChartPlotter({
                 opacity={0.85}
               />
             ) : null}
+
+            {/* Navigation cautions mark where a condition is commonly
+                encountered; they do not claim a precise live boundary. */}
+            {cautions.map((caution) => (
+              <g
+                key={caution.id}
+                transform={`rotate(${caution.rotationDeg} ${caution.x} ${caution.z})`}
+              >
+                <title>{caution.source}</title>
+                <ellipse
+                  cx={caution.x}
+                  cy={caution.z}
+                  rx={caution.radiusEastM}
+                  ry={caution.radiusNorthM}
+                  fill="none"
+                  stroke={CAUTION_COLOR}
+                  strokeWidth="2.5"
+                  strokeDasharray="7 5"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.9"
+                />
+              </g>
+            ))}
           </g>
 
           {/* --- fixed-size overlay ------------------------------------- */}
@@ -989,6 +1013,98 @@ export function ChartPlotter({
               </text>
             );
           })}
+
+          {cautions
+            .filter((caution) => visible(caution.x, caution.z, 80))
+            .map((caution) => {
+              const [px, py] = project(caution.x, caution.z);
+
+              return (
+                <g key={`${caution.id}-label`} transform={`translate(${px} ${py})`}>
+                  <path
+                    d="M -10 3 Q -5 -3 0 3 T 10 3 M -10 9 Q -5 3 0 9 T 10 9"
+                    fill="none"
+                    stroke={CAUTION_COLOR}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <text
+                    x="0"
+                    y="-7"
+                    textAnchor="middle"
+                    style={{
+                      fontFamily: "var(--helm-font-label)",
+                      fontSize: "14px",
+                      fontWeight: 700,
+                      letterSpacing: "1.2px",
+                      fill: CAUTION_COLOR,
+                      paintOrder: "stroke",
+                      stroke: palette.labelHalo,
+                      strokeWidth: "3px",
+                      strokeLinejoin: "round",
+                    }}
+                  >
+                    {caution.name.toUpperCase()}
+                  </text>
+                </g>
+              );
+            })}
+
+          {cautions
+            .filter((caution) => !visible(caution.x, caution.z, 80))
+            .map((caution) => {
+              const [targetX, targetY] = project(caution.x, caution.z);
+              const centreX = box.w / 2;
+              const centreY = box.h / 2;
+              const dx = targetX - centreX;
+              const dy = targetY - centreY;
+              const insetX = Math.max(28, box.w / 2 - 68);
+              const insetY = Math.max(28, box.h / 2 - 38);
+              const factor = Math.min(
+                Math.abs(dx) > 0.001 ? insetX / Math.abs(dx) : Number.POSITIVE_INFINITY,
+                Math.abs(dy) > 0.001 ? insetY / Math.abs(dy) : Number.POSITIVE_INFINITY,
+              );
+              const px = centreX + dx * factor;
+              const py = centreY + dy * factor;
+              const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+
+              return (
+                <g key={`${caution.id}-edge`} transform={`translate(${px} ${py})`}>
+                  <g transform={`rotate(${angle})`}>
+                    <path
+                      d="M 0 -9 L 6 5 L 0 2 L -6 5 Z"
+                      fill={CAUTION_COLOR}
+                      stroke={palette.labelHalo}
+                      strokeWidth="1.5"
+                    />
+                  </g>
+                  <rect
+                    x={dx < 0 ? 10 : -78}
+                    y="-10"
+                    width="68"
+                    height="20"
+                    rx="5"
+                    fill={palette.overlay}
+                    stroke={CAUTION_COLOR}
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={dx < 0 ? 44 : -44}
+                    y="4"
+                    textAnchor="middle"
+                    style={{
+                      fontFamily: "var(--helm-font-label)",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      letterSpacing: "1px",
+                      fill: CAUTION_COLOR,
+                    }}
+                  >
+                    TIDE RIPS
+                  </text>
+                </g>
+              );
+            })}
 
           {/* AIS targets: the green triangle is the standard symbol for a
               vessel reporting over NMEA, pointing along its course. */}
@@ -1105,7 +1221,7 @@ export function ChartPlotter({
                       <path
                         d="M 0 -13 L 8 11 L 0 6 L -8 11 Z"
                         fill={palette.ownShip}
-                        stroke={palette.depthBands[palette.depthBands.length - 1]}
+                        stroke={palette.ownShipEdge}
                         strokeWidth="1.4"
                       />
                     </g>
@@ -1121,47 +1237,60 @@ export function ChartPlotter({
           <span
             className="inline-block"
             style={{
-              width: `${(scaleBar / (effectiveRange * 2)) * 100}%`,
-              minWidth: "18px",
+              width: `${scaleBar * scale}px`,
               height: "2px",
               background: palette.label,
             }}
           />
           <span
-            className="text-[0.5rem] leading-none"
+            className="text-[0.62rem] leading-none"
             style={{ fontFamily: "var(--helm-font-readout)", color: palette.label }}
           >
             {scaleBar >= 1852 ? `${(scaleBar / 1852).toFixed(1)} nm` : `${scaleBar} m`}
           </span>
         </div>
 
-        <div className="absolute bottom-2 right-2 flex items-center gap-1">
-          <HelmButton
-            size="sm"
-            onClick={() => onRangeChange(stepRange(effectiveRange, 1, maxRange))}
+        <div
+          className="absolute right-2 bottom-2 flex items-center gap-0.5 rounded-lg p-0.5 shadow-sm"
+          style={{ background: palette.overlay, color: palette.overlayText }}
+          role="group"
+          aria-label="Chart range"
+        >
+          <PlotterIconButton
+            icon="minus"
+            style={{ color: palette.overlayText }}
+            onClick={() => {
+              const next = stepRange(effectiveRange, 1, maxRange);
+              rangeRef.current = next;
+              renderedRangeRef.current = next;
+              setRenderedRange(next);
+              onRangeChange(next);
+            }}
             disabled={effectiveRange >= maxRange - 0.5}
-            ariaLabel="Zoom out"
-          >
-            −
-          </HelmButton>
+            label="Zoom out"
+          />
           <span
-            className="min-w-[2.6rem] rounded px-1 py-0.5 text-center text-[0.52rem] leading-none"
+            className="min-w-[2.6rem] rounded px-1 py-0.5 text-center text-[0.64rem] leading-none"
             style={{
               fontFamily: "var(--helm-font-readout)",
               color: palette.label,
-              background: palette.overlay,
             }}
           >
             {formatRange(effectiveRange)}
           </span>
-          <HelmButton
-            size="sm"
-            onClick={() => onRangeChange(stepRange(effectiveRange, -1))}
+          <PlotterIconButton
+            icon="plus"
+            style={{ color: palette.overlayText }}
+            onClick={() => {
+              const next = stepRange(effectiveRange, -1);
+              rangeRef.current = next;
+              renderedRangeRef.current = next;
+              setRenderedRange(next);
+              onRangeChange(next);
+            }}
             disabled={effectiveRange <= MIN_RANGE_M + 0.5}
-            ariaLabel="Zoom in"
-          >
-            +
-          </HelmButton>
+            label="Zoom in"
+          />
         </div>
       </div>
     </div>

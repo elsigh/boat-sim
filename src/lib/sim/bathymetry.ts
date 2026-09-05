@@ -110,3 +110,8 @@ export function isGroundedAt(layout: MarinaLayout, point: Vec2): boolean {
 
   return chartDepthMeters(chart, point[0], point[1]) <= 0;
 }
+
+/** A vessel touches bottom as soon as charted depth reaches its actual draft. */
+export function depthGroundsBoat(depthMeters: number, draftMeters: number) {
+  return depthMeters <= draftMeters;
+}

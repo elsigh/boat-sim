@@ -1,8 +1,14 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import type { RapierRigidBody } from "@react-three/rapier";
 import {
+  BufferGeometry,
+  CanvasTexture,
+  Float32BufferAttribute,
+  RepeatWrapping,
+  SRGBColorSpace,
   CatmullRomCurve3,
   Color,
   ExtrudeGeometry,
@@ -10,9 +16,13 @@ import {
   TubeGeometry,
   Vector3,
   type Group,
+  type Texture,
 } from "three";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
+import type { SimulationEnvironment } from "@/lib/sim/boat-physics";
+import { liveRigidBody } from "@/lib/sim/rapier-utils";
+import { sampleWaterHeight } from "@/lib/sim/water-surface";
 
 // Parametric topsides by hull profile family (trawler, express, flybridge, superyacht).
 // Everything is driven by hull length and beam, with per-family geometry tweaks. Local frame:
@@ -51,13 +61,9 @@ function buildHullShape(beamM: number, lengthM: number, scale = 1) {
     halfBeam * 0.92,
     -length * 0.18,
   );
-  shape.quadraticCurveTo(halfBeam * 0.9, -length * 0.5, 0, -length * 0.5);
-  shape.quadraticCurveTo(
-    -halfBeam * 0.9,
-    -length * 0.5,
-    -halfBeam * 0.92,
-    -length * 0.18,
-  );
+  shape.bezierCurveTo(halfBeam * 0.92, -length * 0.36, halfBeam * 0.88, -length * 0.48, halfBeam * 0.77, -length * 0.5);
+  shape.lineTo(-halfBeam * 0.77, -length * 0.5);
+  shape.bezierCurveTo(-halfBeam * 0.88, -length * 0.48, -halfBeam * 0.92, -length * 0.36, -halfBeam * 0.92, -length * 0.18);
   shape.bezierCurveTo(
     -halfBeam * 0.88,
     length * 0.26,
@@ -99,7 +105,7 @@ function createTaperedBoxGeometry({
   });
 
   geometry.rotateX(Math.PI / 2);
-  geometry.translate(0, height * 0.5, 0);
+  geometry.translate(0, height, 0);
   geometry.computeVertexNormals();
 
   return geometry;
@@ -107,21 +113,67 @@ function createTaperedBoxGeometry({
 
 function useHullGeometry(beamM: number, lengthM: number) {
   return useMemo(() => {
-    const geometry = new ExtrudeGeometry(buildHullShape(beamM, lengthM), {
-      depth: 1.32,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      bevelSize: 0.12,
-      bevelThickness: 0.18,
-      steps: 1,
-    });
-
-    geometry.rotateX(Math.PI / 2);
-    geometry.translate(0, 0.34, 0);
+    const outline = buildHullShape(beamM, lengthM).getPoints(48);
+    const rings = [
+      { y: 0.51, width: 1, length: 1 },
+      { y: -0.64, width: 0.86, length: 0.98 },
+      { y: -0.78, width: 0.83, length: 0.975 },
+      { y: -1.08, width: 0.72, length: 0.94 },
+    ];
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const geometry = new BufferGeometry();
+    for (const ring of rings) {
+      for (const point of outline) positions.push(point.x * ring.width, ring.y, point.y * ring.length);
+    }
+    for (let ring = 0; ring < rings.length - 1; ring++) {
+      const start = indices.length;
+      for (let i = 0; i < outline.length - 1; i++) {
+        const a = ring * outline.length + i;
+        const b = a + outline.length;
+        indices.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+      geometry.addGroup(start, indices.length - start, ring === 1 ? 1 : ring === 2 ? 2 : 0);
+    }
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
     geometry.computeVertexNormals();
-
     return geometry;
   }, [beamM, lengthM]);
+}
+
+function useTeakTexture() {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d")!;
+    const colors = ["#ac8658", "#b38d60", "#a98052", "#b18a5b", "#b79064", "#a78055", "#b99265", "#ad8557"];
+    for (let plank = 0; plank < 8; plank++) {
+      ctx.fillStyle = colors[plank];
+      ctx.fillRect(plank * 32, 0, 32, 512);
+      ctx.fillStyle = "#4f4435";
+      ctx.fillRect(plank * 32, 0, 1.5, 512);
+      for (let grain = 0; grain < 8; grain++) {
+        ctx.strokeStyle = `rgba(71, 44, 20, ${0.025 + (grain % 3) * 0.015})`;
+        ctx.beginPath();
+        ctx.moveTo(plank * 32 + grain * 4, 0);
+        ctx.bezierCurveTo(plank * 32 + grain * 4 + 3, 170, plank * 32 + grain * 4 - 2, 340, plank * 32 + grain * 4, 512);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#6b5137";
+      ctx.fillRect(plank * 32, (plank % 3) * 160 + 25, 32, 1);
+    }
+    const map = new CanvasTexture(canvas);
+    map.wrapS = map.wrapT = RepeatWrapping;
+    // Extruded deck UVs are metres; each repeat contains eight 12 cm planks.
+    map.repeat.set(1 / 0.96, 1 / 2.8);
+    map.colorSpace = SRGBColorSpace;
+    map.anisotropy = 4;
+    return map;
+  }, []);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return texture;
 }
 
 /** Flat cap of the hull outline, used for the teak deck and boot stripe. */
@@ -172,7 +224,7 @@ function useStanchionPositions(beamM: number, lengthM: number, scale: number) {
   }, [beamM, lengthM, scale]);
 }
 
-function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
+function TrawlerTopsides({ boat, teakTexture }: { boat: BoatProfile; teakTexture: Texture }) {
   const L = boat.lengthM;
   const B = boat.beamM;
 
@@ -206,17 +258,6 @@ function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
       }),
     [B, L],
   );
-  const coamingGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.3,
-        bowHalfWidth: B * 0.24,
-        height: 0.55,
-        length: L * 0.22,
-      }),
-    [B, L],
-  );
-
   const salonCenterZ = -L * 0.09;
   const salonLength = L * 0.34;
   const salonFrontZ = salonCenterZ + salonLength * 0.5;
@@ -250,6 +291,12 @@ function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
         <boxGeometry args={[B * 0.55, 0.46, 0.04]} />
         <meshStandardMaterial color={new Color(COLORS.glass)} metalness={0.4} roughness={0.15} />
       </mesh>
+      {[-1, 1].flatMap((side) => [-0.3, -0.1, 0.1, 0.3].map((offset) => (
+        <mesh key={`window-mullion-${side}-${offset}`} position={[side * (B * (0.33 - offset * 0.06) + 0.03), 1.22, salonCenterZ + salonLength * offset]} rotation={[0, -side * sideWindowAngle, 0]}>
+          <boxGeometry args={[0.035, 0.5, 0.04]} />
+          <meshStandardMaterial color={COLORS.house} roughness={0.42} />
+        </mesh>
+      )))}
       {/* brow over the front windows */}
       <mesh castShadow position={[0, 1.54, salonFrontZ + 0.1]} rotation={[-0.1, 0, 0]}>
         <boxGeometry args={[B * 0.63, 0.05, 0.42]} />
@@ -285,8 +332,23 @@ function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
       ))}
 
       {/* flybridge coaming with venturi windshield */}
-      <mesh castShadow receiveShadow geometry={coamingGeometry} position={[0, ROOF_TOP_Y, coamingCenterZ]}>
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.55} />
+      <mesh receiveShadow position={[0, ROOF_TOP_Y + 0.025, coamingCenterZ]}>
+        <boxGeometry args={[B * 0.49, 0.035, L * 0.21]} />
+        <meshStandardMaterial map={teakTexture} roughness={0.7} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={`coaming-${side}`} castShadow position={[side * B * 0.265, ROOF_TOP_Y + 0.24, coamingCenterZ]} rotation={[0, side * Math.atan(B * 0.06 / (L * 0.22)), 0]}>
+          <boxGeometry args={[0.085, 0.48, L * 0.22]} />
+          <meshStandardMaterial color={COLORS.house} roughness={0.45} />
+        </mesh>
+      ))}
+      <mesh castShadow position={[0, ROOF_TOP_Y + 0.24, coamingCenterZ - L * 0.11]}>
+        <boxGeometry args={[B * 0.59, 0.48, 0.09]} />
+        <meshStandardMaterial color={COLORS.house} roughness={0.45} />
+      </mesh>
+      <mesh castShadow position={[0, ROOF_TOP_Y + 0.22, coamingCenterZ + L * 0.11]}>
+        <boxGeometry args={[B * 0.49, 0.44, 0.085]} />
+        <meshStandardMaterial color={COLORS.house} roughness={0.45} />
       </mesh>
       <mesh position={[0, ROOF_TOP_Y + 0.66, coamingCenterZ + L * 0.105]} rotation={[-0.32, 0, 0]}>
         <boxGeometry args={[B * 0.44, 0.32, 0.04]} />
@@ -377,7 +439,7 @@ function TrawlerTopsides({ boat }: { boat: BoatProfile }) {
         <cylinderGeometry args={[0.11, 0.11, 0.1, 12]} />
         <meshStandardMaterial color={new Color(COLORS.stainless)} metalness={0.8} roughness={0.25} />
       </mesh>
-      <mesh position={[0, DECK_Y + 0.035, L * 0.29]}>
+      <mesh position={[0, DECK_Y + 0.46, L * 0.29]}>
         <boxGeometry args={[0.72, 0.06, 0.8]} />
         <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.5} />
       </mesh>
@@ -528,30 +590,65 @@ function SuperyachtTopsides({ boat }: { boat: BoatProfile }) {
 export function BoatVisual({
   boat,
   turboActive,
+  bodyRef,
+  environment,
+  grounded = false,
 }: {
   boat: BoatProfile;
   turboActive: boolean;
+  bodyRef?: MutableRefObject<RapierRigidBody | null>;
+  environment?: SimulationEnvironment;
+  grounded?: boolean;
 }) {
   const visualRef = useRef<Group | null>(null);
   const hullGeometry = useHullGeometry(boat.beamM, boat.lengthM);
+  const gunwaleGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 1, 0.035, 0.515);
   const deckGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 0.9, 0.07, DECK_Y);
-  const bootStripeGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 1.004, 0.14, -0.12);
+  const teakTexture = useTeakTexture();
+  const motionPosition = useMemo(() => new Vector3(), []);
   const capRailGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.985, 0.56, 0.05);
   const rubRailGeometry = useRailGeometry(boat.beamM, boat.lengthM, 1.006, 0.02, 0.05);
   const lifelineGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.955, 1.18, 0.024);
   const stanchions = useStanchionPositions(boat.beamM, boat.lengthM, 0.955);
+  const fenderStations = useMemo(() => {
+    const outline = buildHullShape(boat.beamM, boat.lengthM).getPoints(100).filter((p) => p.x > 0);
+    return [-0.32, -0.05, 0.24].map((ratio) => {
+      const z = boat.lengthM * ratio;
+      const nearest = outline.reduce((best, p) => Math.abs(p.y - z) < Math.abs(best.y - z) ? p : best);
+      return { z, x: nearest.x * 0.94 + 0.12 };
+    });
+  }, [boat.beamM, boat.lengthM]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const visual = visualRef.current;
 
     if (!visual) {
       return;
     }
 
-    const smoothing = 1 - Math.exp(-delta * (turboActive ? 2.8 : 4.5));
-    const targetPitch = turboActive ? -0.16 : 0;
-    const targetLift = turboActive ? 0.42 : 0;
+    const smoothing = 1 - Math.exp(-Math.min(delta, 0.1) * 3);
+    let targetPitch = turboActive ? -0.16 : 0;
+    let targetLift = turboActive ? 0.42 : 0;
+    let targetRoll = 0;
+    const body = bodyRef ? liveRigidBody(bodyRef) : null;
+    if (body && environment && !grounded) {
+      visual.getWorldPosition(motionPosition);
+      const rotation = body.rotation();
+      const yaw = 2 * Math.atan2(rotation.y, rotation.w);
+      const dx = Math.sin(yaw), dz = Math.cos(yaw);
+      const halfLength = boat.lengthM * 0.35;
+      const halfBeam = boat.beamM * 0.4;
+      const wave = (x: number, z: number) => sampleWaterHeight(x, z, state.clock.elapsedTime, environment);
+      const { x, z } = motionPosition;
+      targetLift += wave(x, z) * 0.45;
+      targetPitch += Math.max(-0.025, Math.min(0.025, (wave(x - dx * halfLength, z - dz * halfLength) - wave(x + dx * halfLength, z + dz * halfLength)) / (halfLength * 2)));
+      targetRoll = Math.max(-0.025, Math.min(0.025, (wave(x + dz * halfBeam, z - dx * halfBeam) - wave(x - dz * halfBeam, z + dx * halfBeam)) / (halfBeam * 2)));
+      const velocity = body.linvel();
+      const surge = (velocity.x - environment.currentVelocity.x) * dx + (velocity.z - environment.currentVelocity.z) * dz;
+      targetPitch -= Math.min(0.032, Math.max(0, surge) ** 2 * 0.0005);
+    }
     visual.rotation.x += (targetPitch - visual.rotation.x) * smoothing;
+    visual.rotation.z += (targetRoll - visual.rotation.z) * smoothing;
     visual.position.y += (targetLift - visual.position.y) * smoothing;
   });
 
@@ -559,18 +656,20 @@ export function BoatVisual({
     <group ref={visualRef}>
       <mesh castShadow receiveShadow geometry={hullGeometry}>
         <meshStandardMaterial
-          color={new Color(boat.visual.hullColor)}
-          metalness={0.05}
-          roughness={0.55}
+          attach="material-0"
+          color={boat.visual.hullColor}
+          metalness={0.06}
+          roughness={0.32}
         />
+        <meshStandardMaterial attach="material-1" color={COLORS.bootStripe} roughness={0.35} />
+        <meshStandardMaterial attach="material-2" color="#253b3a" roughness={0.78} />
       </mesh>
 
+      <mesh castShadow receiveShadow geometry={gunwaleGeometry}>
+        <meshStandardMaterial color={boat.visual.hullColor} roughness={0.4} />
+      </mesh>
       <mesh receiveShadow geometry={deckGeometry}>
-        <meshStandardMaterial color={new Color(COLORS.teak)} roughness={0.8} />
-      </mesh>
-
-      <mesh geometry={bootStripeGeometry}>
-        <meshStandardMaterial color={new Color(COLORS.bootStripe)} roughness={0.5} />
+        <meshStandardMaterial map={teakTexture} roughness={0.72} />
       </mesh>
 
       <mesh castShadow geometry={capRailGeometry}>
@@ -599,24 +698,36 @@ export function BoatVisual({
         </mesh>
       ))}
 
+      {/* Paired sidelights: red to port (+x), green to starboard (-x). */}
+      {[-1, 1].map((side) => (
+        <group key={`nav-${side}`} position={[side * boat.beamM * 0.34, 1.37, boat.lengthM * 0.065]}>
+          <mesh><boxGeometry args={[0.12, 0.12, 0.22]} /><meshStandardMaterial color="#22302f" roughness={0.4} /></mesh>
+          <mesh position={[side * 0.065, 0, 0]}>
+            <sphereGeometry args={[0.045, 8, 6]} />
+            <meshStandardMaterial color={side > 0 ? "#d75443" : "#48bb83"} emissive={side > 0 ? "#b82214" : "#15985a"} emissiveIntensity={0.7} />
+          </mesh>
+        </group>
+      ))}
+      {[-0.36, 0.31].flatMap((z) => [-1, 1].map((side) => (
+        <group key={`cleat-${z}-${side}`} position={[side * boat.beamM * (z > 0 ? 0.22 : 0.37), DECK_Y + 0.045, boat.lengthM * z]}>
+          <mesh><boxGeometry args={[0.1, 0.035, 0.32]} /><meshStandardMaterial color={COLORS.stainless} metalness={0.8} roughness={0.28} /></mesh>
+          <mesh position={[0, 0.07, 0]}><boxGeometry args={[0.06, 0.05, 0.38]} /><meshStandardMaterial color={COLORS.stainless} metalness={0.8} roughness={0.28} /></mesh>
+        </group>
+      )))}
+
       {/* swim platform tucked against the transom */}
       <mesh castShadow position={[0, 0.05, -boat.lengthM * 0.475 - 0.28]}>
         <boxGeometry args={[boat.beamM * 0.58, 0.07, 0.85]} />
-        <meshStandardMaterial color={new Color(COLORS.teak)} roughness={0.8} />
+        <meshStandardMaterial map={teakTexture} roughness={0.72} />
       </mesh>
 
       {/* fenders along both rails — this is a docking boat, after all */}
-      {[-0.32, -0.05, 0.24].map((zRatio) =>
-        [-1, 1].map((side) => (
-          <mesh
-            key={`fender-${zRatio}-${side}`}
-            position={[side * boat.beamM * 0.485, -0.15, boat.lengthM * zRatio]}
-          >
-            <capsuleGeometry args={[0.14, 0.42, 4, 10]} />
-            <meshStandardMaterial color="#f2f4f2" roughness={0.6} />
-          </mesh>
-        )),
-      )}
+      {fenderStations.flatMap(({ x, z }, index) => [-1, 1].map((side) => (
+        <group key={`fender-${index}-${side}`} position={[side * x, 0, z]}>
+          <mesh position={[0, 0.37, 0]}><cylinderGeometry args={[0.009, 0.009, 0.34, 5]} /><meshStandardMaterial color="#b4a58a" roughness={0.95} /></mesh>
+          <mesh position={[0, -0.15, 0]}><capsuleGeometry args={[0.14, 0.42, 4, 10]} /><meshStandardMaterial color="#f2f4f2" roughness={0.6} /></mesh>
+        </group>
+      )))}
 
       {boat.visual.hullProfile === "express" ? (
         <ExpressTopsides boat={boat} />
@@ -625,7 +736,7 @@ export function BoatVisual({
       ) : boat.visual.hullProfile === "superyacht" ? (
         <SuperyachtTopsides boat={boat} />
       ) : (
-        <TrawlerTopsides boat={boat} />
+        <TrawlerTopsides boat={boat} teakTexture={teakTexture} />
       )}
     </group>
   );
