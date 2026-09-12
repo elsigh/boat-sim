@@ -1,0 +1,215 @@
+name: Release macOS
+run-name: macOS ${{ inputs.version }} · ${{ inputs.mode }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 0.1.0 or 0.2.0-beta.1)"
+        required: true
+        type: string
+      mode:
+        description: "Create a draft, publish immediately, or build downloads without a release"
+        type: choice
+        default: draft
+        options:
+          - draft
+          - publish
+          - build-only
+      sign_and_notarize:
+        description: "Sign with Apple Developer ID and notarize (requires repository secrets)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Keep manual release runs from racing over tags or assets.
+concurrency:
+  group: release-macos
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate version and release configuration
+        id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_SIGNED: ${{ inputs.sign_and_notarize }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          node scripts/release-version.cjs
+          node -e 'require("./electron/release.config.cjs")'
+      - name: Require a fresh release version
+        if: inputs.mode != 'build-only'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG")"
+          if jq -e --arg ref "refs/tags/$RELEASE_TAG" 'any(.[]; .ref == $ref)' <<< "$refs" >/dev/null; then
+            echo "::error::Tag $RELEASE_TAG already exists. Choose a new version."
+            exit 1
+          fi
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')"
+          if printf '%s\n' "$releases" | grep -Fxq -- "$RELEASE_TAG"; then
+            echo "::error::Release $RELEASE_TAG already exists, possibly as a draft."
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_SIGNED: ${{ inputs.sign_and_notarize }}
+      ARCH: ${{ matrix.arch }}
+      NEXT_TELEMETRY_DISABLED: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.sign_and_notarize && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.11'
+      - name: Install locked dependencies
+        run: |
+          test "$(node -p process.arch)" = "$ARCH"
+          pnpm install --frozen-lockfile
+          # pnpm 10 does not run Electron's install script by default.
+          node node_modules/electron/install.js
+      - name: Test
+        run: |
+          node --test scripts/release-version.test.cjs
+          bun test src/lib
+      - name: Export the offline app
+        run: pnpm run export
+      - name: Package DMG and ZIP
+        env:
+          CSC_LINK: ${{ inputs.sign_and_notarize && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.sign_and_notarize && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ inputs.sign_and_notarize && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.sign_and_notarize && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ inputs.sign_and_notarize && secrets.APPLE_TEAM_ID || '' }}
+        run: pnpm exec electron-builder --config electron/release.config.cjs --mac dmg zip --"$ARCH" --publish never
+      - name: Verify signature and notarization
+        env:
+          SIGNED: ${{ inputs.sign_and_notarize }}
+        run: |
+          app="$(find dist-app/release -maxdepth 2 -name boatsim.app -type d -print -quit)"
+          test -n "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if [[ "$SIGNED" == true ]]; then
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          fi
+      - name: Check assets and write checksums
+        working-directory: dist-app/release
+        run: |
+          test -s "boatsim-$RELEASE_VERSION-$ARCH.dmg"
+          test -s "boatsim-$RELEASE_VERSION-$ARCH.zip"
+          shasum -a 256 "boatsim-$RELEASE_VERSION-$ARCH.dmg" "boatsim-$RELEASE_VERSION-$ARCH.zip" > "SHA256SUMS-$ARCH.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            dist-app/release/*.dmg
+            dist-app/release/*.zip
+            dist-app/release/SHA256SUMS-*.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Create GitHub Release
+    if: inputs.mode != 'build-only'
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      PUBLISH: ${{ inputs.mode == 'publish' }}
+      SIGNED: ${{ inputs.sign_and_notarize }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: macos-*
+          path: assets
+          merge-multiple: true
+      - name: Verify both downloads
+        working-directory: assets
+        run: |
+          cat SHA256SUMS-arm64.txt SHA256SUMS-x64.txt > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+          for arch in arm64 x64; do
+            test -s "boatsim-$RELEASE_VERSION-$arch.dmg"
+            test -s "boatsim-$RELEASE_VERSION-$arch.zip"
+          done
+      - name: Create release with all assets
+        run: |
+          cat > release-notes.md <<EOF_NOTES
+          Download the **arm64 DMG** for Apple Silicon (M-series), or the **x64 DMG** for an Intel Mac. Open the DMG and drag boatsim into Applications. ZIP downloads are also provided.
+
+          The simulator runs offline. Release checksums are in SHA256SUMS.txt.
+
+          Built from commit $GITHUB_SHA.
+          EOF_NOTES
+          if [[ "$SIGNED" == true ]]; then
+            printf '\nSigned with Apple Developer ID and notarized by Apple.\n' >> release-notes.md
+          else
+            printf '\nThis build uses an ad hoc signature and is not Apple-notarized. macOS may block the first launch; if you trust this release, use System Settings → Privacy & Security → Open Anyway after attempting to open it.\n' >> release-notes.md
+          fi
+          flags=(--draft)
+          if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
+          # Upload to a draft first so a public release never has partial assets.
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "boatsim $RELEASE_TAG" \
+            --notes-file release-notes.md --generate-notes "${flags[@]}" \
+            "assets/boatsim-$RELEASE_VERSION-arm64.dmg" "assets/boatsim-$RELEASE_VERSION-arm64.zip" \
+            "assets/boatsim-$RELEASE_VERSION-x64.dmg" "assets/boatsim-$RELEASE_VERSION-x64.zip" assets/SHA256SUMS.txt
+          if [[ "$PUBLISH" == true ]]; then
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          fi
+          url="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+          printf '### macOS release ready\n\n[Open the release](%s)\n\nApple Silicon and Intel DMGs, ZIPs, and SHA-256 checksums are attached.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$PUBLISH" != true ]]; then
+            printf '\nThis is a **draft**. Review it in Releases, then click **Publish release** to make the downloads public.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
