@@ -42,6 +42,14 @@ For distribution with Apple Developer ID, add these **repository secrets** under
 
 Use a password-protected certificate export. Keep certificates and passwords out of commits, workflow inputs and release notes. After adding the secrets, enable **Sign with Apple Developer ID and notarize** when running the action. A requested signed build fails if credentials are missing; it never silently falls back to an ad hoc build. The action verifies the resulting signature, stapled notarization ticket and Gatekeeper assessment.
 
+### Reusing an existing local setup
+
+If local builds already sign and notarize successfully, keep using that Developer ID identity. Export its certificate **and private key** as a password-protected `.p12` for `CSC_LINK`; creating a new certificate or paying another developer fee is unnecessary. Your Apple team ID is the same locally and on GitHub.
+
+The local `APPLE_KEYCHAIN_PROFILE` points to a profile on your Mac; GitHub-hosted runners cannot access it. Add the matching Apple Account email and an app-specific password as `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`. If the existing password is available only inside Apple's protected Keychain, create a separate app-specific password for GitHub Actions at [Apple Account](https://account.apple.com). Keep the local profile intact.
+
+Enter these values directly in [Actions secrets](https://github.com/elsigh/boat-sim/settings/secrets/actions), or use `gh secret set APPLE_ID` and `gh secret set APPLE_APP_SPECIFIC_PASSWORD` from this repository; the CLI prompts for each value. Do not paste credentials into chat or put them in command arguments. After setup, test with **mode: build-only** and signing enabled before cutting a release.
+
 The release-specific builder configuration lives in `electron/release.config.cjs`. Local `pnpm app:build` settings are unchanged. Release versions are applied to the packaged app without modifying `package.json` or adding version-bump commits.
 
 ## Failed runs and retries

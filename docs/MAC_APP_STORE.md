@@ -29,8 +29,9 @@ sandbox. Friends double-click the DMG and it just opens.
    finds it automatically.
 3. **Notarization credentials** (Apple scans the app, ~2 minutes,
    automatic): create an *app-specific password* at account.apple.com →
-   Sign-In and Security, then store it **in the macOS Keychain** — don't
-   keep it in dotfiles or CI/hosting dashboards:
+   Sign-In and Security, then store it **in the macOS Keychain** for local
+   builds. Keep it out of dotfiles and source control. For GitHub-hosted
+   builds, use encrypted Actions secrets as described in [Releasing the Mac app](releases.md).
 
    ```bash
    xcrun notarytool store-credentials "boatsim-notary" \
