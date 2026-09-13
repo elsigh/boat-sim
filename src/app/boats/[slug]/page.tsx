@@ -72,6 +72,7 @@ export default async function BoatProfilePage({ params }: BoatProfilePageProps) 
               <SpecCell label="Displacement" value={boat.stats.displacement} />
               <SpecCell label="Cruise Speed" value={boat.stats.cruiseSpeed} />
               <SpecCell label="Max Speed" value={boat.stats.maxSpeed} />
+              <SpecCell label="Est. Vessel Value (USD)" value={boat.economics.replacementValueUsd.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 })} />
               <SpecCell label="Engines" value={boat.stats.engineNotes} />
               <SpecCell label="Thrusters" value={boat.stats.thruster} />
               <SpecCell label="Stabilizers" value={boat.stats.stabilizers} />
@@ -117,17 +118,23 @@ export default async function BoatProfilePage({ params }: BoatProfilePageProps) 
                   displacement, thrust envelope, and visual proportions stay aligned.
                 </p>
                 <p>
+                  Nominal calm-water top speed: {boat.handling.nominalMaxKnots} kn.
+                  Engine range: {boat.engine.idleRpm}–{boat.engine.maxRpm} RPM.
+                  These are simulator calibrations, not sea-trial measurements.
+                </p>
+                {boat.handling.controlNote && <p>{boat.handling.controlNote}</p>}
+                <p>
                   Status: <span className="font-mono uppercase text-slate-100">{boat.simStatus}</span>
                 </p>
                 <p>
-                  Charter page:{" "}
+                  Vessel reference:{" "}
                   <a
                     href={boat.charterUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="text-sky-200 underline underline-offset-4"
                   >
-                    NW Explorations
+                    {boat.homePort ? "Charter listing" : "Model specifications"}
                   </a>
                 </p>
               </div>

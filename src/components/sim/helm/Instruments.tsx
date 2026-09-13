@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 
-import { rpmFromThrottle, type EngineGear } from "@/lib/sim/engine-dynamics";
+import { rpmFromThrottle, DEFAULT_ENGINE, type EngineSpecification, type EngineGear } from "@/lib/sim/engine-dynamics";
+import { TURBO_RPM } from "@/lib/sim/turbo-controls";
 
 import type { HelmTheme } from "@/lib/boats/helm-theme";
 
@@ -13,13 +14,12 @@ import { PanelLabel, Readout, Well } from "./Panel";
 // rotated a positioned <div>, and the arrows never sat in the middle of their
 // circles. Rotating an SVG group about an explicit centre can't drift.
 
-const TACH_MAX_RPM = 2400;
-const TACH_IDLE_RPM = 600;
-const TACH_REDLINE_RPM = 2150;
 
 type TachProps = {
   label: string;
+  engine?: EngineSpecification;
   rpm: number;
+  turboActive?: boolean;
   /** -1..1 lever demand, drawn as the commanded mark. */
   demand: number;
   gear: EngineGear;
@@ -37,7 +37,9 @@ type TachProps = {
  */
 export function Tachometer({
   label,
+  engine = DEFAULT_ENGINE,
   rpm,
+  turboActive = false,
   demand,
   gear,
   shifting,
@@ -47,11 +49,12 @@ export function Tachometer({
   instrument,
   onToggle,
 }: TachProps) {
-  const state = starting ? "starting" : running ? "running" : armed ? "armed" : "off";
+  const idling = running && gear === 0 && !shifting && Math.abs(rpm - engine.idleRpm) < 50;
+  const state = starting ? "starting" : running ? turboActive ? "turbo" : idling ? "idling" : "running" : armed ? "armed" : "off";
   const stateTone =
-    state === "running"
+    state === "running" || state === "idling"
       ? "var(--helm-good)"
-      : state === "starting"
+      : state === "starting" || state === "turbo"
         ? "var(--helm-warn)"
         : state === "armed"
           ? "var(--helm-accent)"
@@ -87,36 +90,40 @@ export function Tachometer({
         </span>
       </button>
 
-      <div className="mt-0.5 flex items-center justify-between px-0.5 text-[0.58rem] uppercase tracking-widest" style={{ color: shifting ? "var(--helm-warn)" : "var(--helm-text-dim)" }}>
+      <div className="mt-0.5 flex items-center justify-between gap-1 px-0.5 text-[0.58rem] uppercase tracking-wide" style={{ color: shifting ? "var(--helm-warn)" : "var(--helm-text-dim)" }}>
         <span>Gear</span>
-        <span>{!running ? "—" : shifting && demand !== 0 ? "Shifting" : gear > 0 ? "Ahead" : gear < 0 ? "Astern" : "Neutral"}</span>
+        <span className="text-right" title={running && gear === 0 ? "Neutral disengages the propeller. The engine continues to idle with no propulsion thrust." : undefined}>{!running ? "—" : shifting && demand !== 0 ? "Shifting" : gear > 0 ? "Ahead" : gear < 0 ? "Astern" : "Neutral · 0 drive"}</span>
       </div>
       {instrument === "analog" ? (
-        <AnalogTach rpm={rpm} demand={demand} live={running || starting} />
+        <AnalogTach engine={engine} rpm={rpm} demand={demand} live={running || starting} turboActive={turboActive} />
       ) : (
-        <DigitalTach rpm={rpm} demand={demand} live={running || starting} />
+        <DigitalTach engine={engine} rpm={rpm} demand={demand} live={running || starting} turboActive={turboActive} />
       )}
     </Well>
   );
 }
 
-function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live: boolean }) {
+function DigitalTach({ rpm, demand, live, engine, turboActive }: { rpm: number; demand: number; live: boolean; engine: EngineSpecification; turboActive: boolean }) {
+  const minRpm = Math.floor(engine.idleRpm / 100) * 100;
+  const maxRpm = turboActive || rpm > engine.maxRpm ? TURBO_RPM : engine.maxRpm;
+  const redlineRpm = engine.maxRpm * 0.94;
   const segments = 22;
   const fraction = live
-    ? Math.min(1, Math.max(0, (rpm - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)))
+    ? Math.min(1, Math.max(0, (rpm - minRpm) / (maxRpm - minRpm)))
     : 0;
   const lit = Math.round(fraction * segments);
   const redlineSegment = Math.round(
-    ((TACH_REDLINE_RPM - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)) * segments,
+    ((redlineRpm - minRpm) / (maxRpm - minRpm)) * segments,
   );
-  const demandFraction = Math.min(1, Math.max(0, (rpmFromThrottle(demand) - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)));
+  const demandFraction = Math.min(1, Math.max(0, ((turboActive ? TURBO_RPM : rpmFromThrottle(demand, engine)) - minRpm) / (maxRpm - minRpm)));
 
   return (
     <div className="mt-1">
       <div className="flex items-baseline justify-between">
         <Readout value={live ? Math.round(rpm) : "----"} size="lg" tone={live ? "readout" : "text"} />
         <span
-          className="text-[0.6rem] leading-none"
+          className="text-right text-[0.6rem] leading-none"
+          title="Engine revolutions per minute"
           style={{
             fontFamily: "var(--helm-font-label)",
             letterSpacing: "0.2em",
@@ -124,11 +131,11 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
             color: "var(--helm-text-dim)",
           }}
         >
-          rpm
+          eng rpm
         </span>
       </div>
 
-      <div className="mt-1 flex h-[0.55rem] items-stretch gap-[2px]">
+      <div className="mt-1 flex h-[0.55rem] items-stretch gap-[2px]" role="meter" aria-label="Engine RPM" aria-valuemin={0} aria-valuemax={maxRpm} aria-valuenow={Math.round(rpm)}>
         {Array.from({ length: segments }, (_, index) => {
           const isLit = index < lit;
           const isRed = index >= redlineSegment;
@@ -172,16 +179,19 @@ function DigitalTach({ rpm, demand, live }: { rpm: number; demand: number; live:
   );
 }
 
-function AnalogTach({ rpm, demand, live }: { rpm: number; demand: number; live: boolean }) {
+function AnalogTach({ rpm, demand, live, engine, turboActive }: { rpm: number; demand: number; live: boolean; engine: EngineSpecification; turboActive: boolean }) {
+  const minRpm = Math.floor(engine.idleRpm / 100) * 100;
+  const maxRpm = turboActive || rpm > engine.maxRpm ? TURBO_RPM : engine.maxRpm;
+  const redlineRpm = engine.maxRpm * 0.94;
   const fraction = live
-    ? Math.min(1, Math.max(0, (rpm - TACH_IDLE_RPM) / (TACH_MAX_RPM - TACH_IDLE_RPM)))
+    ? Math.min(1, Math.max(0, (rpm - minRpm) / (maxRpm - minRpm)))
     : 0;
   const angle = -132 + fraction * 264;
   const ticks = useMemo(() => Array.from({ length: 13 }, (_, index) => -132 + index * 22), []);
 
   return (
     <div className="mt-1">
-      <svg viewBox="0 0 100 100" className="mx-auto h-24 w-24">
+      <svg viewBox="0 0 100 100" className="mx-auto h-24 w-24" role="img" aria-label={`Tachometer, ${Math.round(rpm)} of ${maxRpm} RPM`}>
         <circle cx="50" cy="50" r="47" fill="rgba(0,0,0,0.20)" />
         <circle
           cx="50"
@@ -199,12 +209,18 @@ function AnalogTach({ rpm, demand, live }: { rpm: number; demand: number; live: 
             x2="50"
             y2={index % 2 === 0 ? 17 : 14}
             stroke={
-              index >= 11 ? "var(--helm-danger)" : "var(--helm-text-dim)"
+              minRpm + index / 12 * (maxRpm - minRpm) >= redlineRpm ? "var(--helm-danger)" : "var(--helm-text-dim)"
             }
             strokeWidth={index % 2 === 0 ? 1.6 : 1}
             transform={`rotate(${tick} 50 50)`}
           />
         ))}
+        {[0, 0.5, 1].map((fraction) => {
+          const radians = (-132 + fraction * 264) * Math.PI / 180;
+          return <text key={fraction} x={50 + Math.sin(radians) * 28} y={50 - Math.cos(radians) * 28 + 2.5} textAnchor="middle" style={{ fontFamily: "var(--helm-font-readout)", fontSize: "6px", fill: "var(--helm-text-dim)" }}>
+            {Math.round(minRpm + fraction * (maxRpm - minRpm))}
+          </text>;
+        })}
         <g transform={`rotate(${angle} 50 50)`}>
           <polygon
             points="50,14 47.4,52 52.6,52"
@@ -237,7 +253,7 @@ function AnalogTach({ rpm, demand, live }: { rpm: number; demand: number; live: 
             fill: "var(--helm-text-dim)",
           }}
         >
-          RPM
+          ENG RPM
         </text>
       </svg>
       <div className="mt-0.5 flex items-center justify-between">

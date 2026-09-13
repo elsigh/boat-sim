@@ -1,3 +1,5 @@
+import type { VesselAsset } from "../boats/valuation";
+
 const METERS_PER_SECOND_TO_KNOTS = 1 / 0.514444;
 
 export type ImpactSurface =
@@ -10,6 +12,16 @@ export type ImpactSurface =
 
 export type ImpactSeverity = "scuff" | "minor" | "major" | "severe";
 
+/** Stable structural member; kept separately from the rolling incident feed. */
+export type Fracture = {
+  key: string;
+  objectName: string;
+  workJ: number;
+  width: number;
+  length: number;
+  vessel?: VesselAsset;
+};
+
 /** Raw contact sample straight from the physics callback, before filtering. */
 export type RawImpact = {
   /** Collider name of what was struck, e.g. "dock:fh-g-finger-left-3". */
@@ -20,7 +32,14 @@ export type RawImpact = {
   world: { x: number; z: number };
   /** Approximate contact point in the boat's local frame (+z bow, +x port). */
   local: { x: number; z: number };
+  /** Contact in the struck body's frame; follows moving vessels. */
+  targetLocal?: { x: number; z: number };
+  /** Unit direction from our hull into the other object, world coordinates. */
+  normal?: { x: number; z: number };
   atMs: number;
+  fracture?: Fracture;
+  vesselMassKg?: number;
+  targetVessel?: VesselAsset;
 };
 
 export type ImpactIncident = {
@@ -39,6 +58,10 @@ export type ImpactIncident = {
   description: string;
   world: { x: number; z: number };
   local: { x: number; z: number };
+  targetLocal?: { x: number; z: number };
+  normal?: { x: number; z: number };
+  fracture?: Fracture;
+  targetVessel?: VesselAsset;
 };
 
 // Anything slower than a firm fender push is a normal docking touch.
@@ -47,8 +70,21 @@ const HARMLESS_BELOW_KNOTS = 0.6;
 // incident against the same object after it has had time to be a new event.
 const PER_OBJECT_COOLDOWN_MS = 1500;
 
+/** Point velocity includes the bow/stern sweeping around the centre of mass.
+ * Use a normal pointing out of our hull toward the struck object. */
+export function closingSpeedAtContact(
+  velocity: { x: number; z: number }, yawRate: number,
+  lever: { x: number; z: number }, otherVelocity: { x: number; z: number },
+  normal: { x: number; z: number },
+) {
+  return Math.max(0,
+    (velocity.x + yawRate * lever.z - otherVelocity.x) * normal.x
+    + (velocity.z - yawRate * lever.x - otherVelocity.z) * normal.z,
+  );
+}
+
 export function severityForClosingSpeed(knots: number): ImpactSeverity | null {
-  if (knots < HARMLESS_BELOW_KNOTS) {
+  if (!Number.isFinite(knots) || knots < HARMLESS_BELOW_KNOTS) {
     return null;
   }
 
@@ -69,7 +105,7 @@ export function severityForClosingSpeed(knots: number): ImpactSeverity | null {
 
 /**
  * Percentage points of hull integrity lost. Tuned so a 1 kt bump costs ~2%,
- * 2.5 kt ~11%, and anything over 6 kt into a solid object is catastrophic.
+ * 2.5 kt ~17%, and anything over 6 kt into a solid object is catastrophic.
  * Kinetic energy grows with v^2; gelcoat and planking fail super-linearly
  * once the fenders bottom out, hence the 1.6 exponent on the excess speed.
  */
@@ -146,7 +182,7 @@ function describeIncident(
         : `Collided with a ${surfaceLabel} at ${speed} — serious damage to both hulls at your ${hullLocation}.`;
     case "severe":
       return surface === "dock" || surface === "piling"
-        ? `Drove into the ${surfaceLabel} at ${speed} — dock section destroyed, hull breached at the ${hullLocation}.`
+        ? `Drove into the ${surfaceLabel} at ${speed} — timber torn away, hull breached at the ${hullLocation}.`
         : `Catastrophic collision with a ${surfaceLabel} at ${speed} — hull breached at the ${hullLocation}.`;
   }
 }
@@ -172,17 +208,24 @@ export class ImpactTracker {
       return null;
     }
 
-    const lastAt = this.lastIncidentAt.get(raw.otherName);
+    // A member snapping just after a solid contact is a new event. In
+    // particular, piling/boat fracture keys equal their collider names.
+    const contactKey = raw.fracture ? `fracture:${raw.fracture.key}` : `contact:${raw.otherName}`;
+    const lastAt = this.lastIncidentAt.get(contactKey);
 
     if (lastAt !== undefined && raw.atMs - lastAt < PER_OBJECT_COOLDOWN_MS) {
       return null;
     }
 
-    this.lastIncidentAt.set(raw.otherName, raw.atMs);
+    this.lastIncidentAt.set(contactKey, raw.atMs);
 
     const { surface, surfaceLabel } = classifySurface(raw.otherName);
     const hullLocation = describeHullLocation(raw.local, boatLengthM);
-    const hullDamagePct = hullDamageForClosingSpeed(knots);
+    // A yielding float does less harm than a seawall. Charge damage for each
+    // member torn out, rather than applying the solid-wall penalty per cell.
+    const hullDamagePct = raw.fracture && raw.vesselMassKg
+      ? Math.min(45, raw.fracture.workJ / raw.vesselMassKg * 1.8 + Math.min(12, knots * 0.24))
+      : hullDamageForClosingSpeed(knots);
 
     return {
       id: this.nextId++,
@@ -197,6 +240,10 @@ export class ImpactTracker {
       description: describeIncident(severity, surface, surfaceLabel, hullLocation, knots),
       world: raw.world,
       local: raw.local,
+      targetLocal: raw.targetLocal,
+      normal: raw.normal,
+      fracture: raw.fracture,
+      targetVessel: raw.targetVessel ?? raw.fracture?.vessel,
     };
   }
 }

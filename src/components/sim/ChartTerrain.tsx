@@ -1,9 +1,10 @@
 "use client";
 
 import { CoefficientCombineRule, RigidBody, TrimeshCollider } from "@react-three/rapier";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   Color,
+  ConeGeometry,
   DoubleSide,
   ExtrudeGeometry,
   InstancedMesh,
@@ -14,7 +15,9 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
+import { buildTerrainRelief, terrainHeightAt } from "@/lib/charts/terrain-relief";
 import type { ChartData, ChartPoint } from "@/lib/charts";
 import { pointInRing, ringBounds, scatterTrees } from "@/lib/charts/geometry";
 
@@ -31,6 +34,8 @@ type ChartTerrainProps = {
   chart: ChartData;
   /** Rough island heights are enough — the camera never gets above them. */
   reliefM?: number;
+  surveyedRelief?: boolean;
+  clearings?: Array<{ x: number; z: number; radius: number }>;
 };
 
 /**
@@ -97,11 +102,13 @@ function buildWallMesh(rings: ChartPoint[][]) {
  * The land itself: real shoreline rings extruded into low islands, with
  * collision so running aground actually stops the boat.
  */
-export function ChartTerrain({ chart, reliefM = 26 }: ChartTerrainProps) {
+export function ChartTerrain({ chart, reliefM = 26, surveyedRelief = false, clearings }: ChartTerrainProps) {
   const solids = useMemo(() => chart.land.filter((ring) => !ring.hole), [chart.land]);
   const holes = useMemo(() => chart.land.filter((ring) => ring.hole), [chart.land]);
+  const solidRings = useMemo(() => solids.map((ring) => ring.points), [solids]);
 
   const pieces = useMemo(() => {
+    if (surveyedRelief) return [{ key: "surveyed-relief", geometry: buildTerrainRelief(chart), big: true }];
     return solids.map((ring, index) => {
       const bounds = ringBounds(ring.points);
       const shape = new Shape(toShapePoints(ring.points));
@@ -143,13 +150,17 @@ export function ChartTerrain({ chart, reliefM = 26 }: ChartTerrainProps) {
         big: ring.areaM2 > 6000,
       };
     });
-  }, [holes, reliefM, solids]);
+  }, [holes, reliefM, solids, surveyedRelief, chart]);
+  useEffect(() => () => pieces.forEach((piece) => piece.geometry.dispose()), [pieces]);
 
   const wall = useMemo(
-    () => buildWallMesh(solids.map((ring) => ring.points)),
-    [solids],
+    () => buildWallMesh(solidRings),
+    [solidRings],
   );
-  const trees = useMemo(() => scatterTrees(chart), [chart]);
+  const trees = useMemo(() => scatterTrees(chart, surveyedRelief ? { density: 1 / 150, max: 10000, maxPerRing: 8000 } : undefined)
+    .filter((tree) => !clearings?.some((c) => Math.hypot(tree.x - c.x, tree.z - c.z) < c.radius))
+    .map((tree) => ({ ...tree, groundY: surveyedRelief ? terrainHeightAt(chart, tree.x, tree.z) : 3 })),
+  [chart, surveyedRelief, clearings]);
 
   return (
     <group>
@@ -167,15 +178,16 @@ export function ChartTerrain({ chart, reliefM = 26 }: ChartTerrainProps) {
       {pieces.map((piece) => (
         <mesh key={piece.key} geometry={piece.geometry} castShadow receiveShadow>
           <meshStandardMaterial
-            color={piece.big ? "#57624a" : "#6b6f56"}
+            color={surveyedRelief ? "#ffffff" : piece.big ? "#57624a" : "#6b6f56"}
+            vertexColors={surveyedRelief}
             roughness={0.97}
             side={DoubleSide}
           />
         </mesh>
       ))}
 
-      <ShorelineBand rings={solids.map((ring) => ring.points)} />
-      <InstancedConifers points={trees} />
+      <ShorelineBand rings={solidRings} />
+      <InstancedConifers points={trees} detailed={surveyedRelief} />
     </group>
   );
 }
@@ -197,6 +209,7 @@ function ShorelineBand({ rings }: { rings: ChartPoint[][] }) {
     merged.computeVertexNormals();
     return merged;
   }, [rings]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   return (
     <mesh geometry={geometry} receiveShadow>
@@ -205,8 +218,22 @@ function ShorelineBand({ rings }: { rings: ChartPoint[][] }) {
   );
 }
 
-function InstancedConifers({ points }: { points: Array<{ x: number; z: number; scale: number }> }) {
+function InstancedConifers({ points, detailed }: { points: Array<{ x: number; z: number; scale: number; groundY: number }>; detailed: boolean }) {
   const meshRef = useRef<InstancedMesh | null>(null);
+  const geometry = useMemo(() => {
+    if (!detailed) return new ConeGeometry(2.6, 11, 6);
+    // Overlapping branch tiers soften the silhouette while keeping one draw.
+    const tiers = [[3.3, 6.7, -1.6], [2.65, 6.0, 0.7], [1.8, 4.8, 3.1]].map(([radius, height, y], i) => {
+      const part = new ConeGeometry(radius, height, 9);
+      part.rotateY(i * 0.7);
+      part.translate(0, y, 0);
+      return part;
+    });
+    const merged = mergeGeometries(tiers)!;
+    tiers.forEach((part) => part.dispose());
+    return merged;
+  }, [detailed]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -222,12 +249,13 @@ function InstancedConifers({ points }: { points: Array<{ x: number; z: number; s
     const color = new Color();
 
     points.forEach((tree, index) => {
-      const height = 11 * tree.scale;
-      translation.set(tree.x, 3 + height * 0.4, tree.z);
-      scale.set(tree.scale, tree.scale, tree.scale);
+      const height = (detailed ? 17 : 11) * tree.scale;
+      translation.set(tree.x, tree.groundY + height * 0.5, tree.z);
+      scale.set(tree.scale * (detailed ? 1.45 : 1), height / 11, tree.scale * (detailed ? 1.45 : 1));
       matrix.compose(translation, quaternion, scale);
       mesh.setMatrixAt(index, matrix);
-      color.setHSL(0.33, 0.3, 0.12 + (index % 7) * 0.011);
+      if (detailed) color.set(["#355445", "#405c45", "#4d634a", "#3b584b", "#48624b"][index % 5]);
+      else color.setHSL(0.32, 0.26, 0.12 + (index % 7) * 0.011);
       mesh.setColorAt(index, color);
     });
 
@@ -236,16 +264,16 @@ function InstancedConifers({ points }: { points: Array<{ x: number; z: number; s
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true;
     }
-  }, [points]);
+    mesh.computeBoundingSphere();
+  }, [points, detailed]);
 
   if (points.length === 0) {
     return null;
   }
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, points.length]} castShadow>
-      <coneGeometry args={[2.6, 11, 6]} />
-      <meshStandardMaterial color="#2c4a31" roughness={0.96} />
+    <instancedMesh ref={meshRef} args={[geometry, undefined, points.length]} castShadow>
+      <meshStandardMaterial color={detailed ? "#ffffff" : "#2c4a31"} roughness={0.96} />
     </instancedMesh>
   );
 }

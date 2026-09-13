@@ -45,8 +45,8 @@
 
 .title span {
   display: block;
-  font-size: 0.28em;
-  letter-spacing: 0.42em;
+  font-size: 0.16em;
+  letter-spacing: 0.12em;
   line-height: 1;
   transform: translateX(0.15em);
   -webkit-text-stroke-width: clamp(1px, 0.2vw, 3px);

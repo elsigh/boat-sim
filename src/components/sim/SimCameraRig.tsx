@@ -93,7 +93,7 @@ export function SimCameraRig({
     } else if (viewMode === "forward") {
       const orbitHeading = heading + Math.PI + yawOffset;
       const polar = Math.min(1.42, Math.max(0.98, 1.16 + pitchOffset));
-      const distance = Math.max(18.5, boatLengthM * 1.08);
+      const distance = Math.max(10, boatLengthM * 1.17);
       const horizontalRadius = Math.sin(polar) * distance;
       const verticalOffset = Math.cos(polar) * distance;
 
@@ -104,12 +104,12 @@ export function SimCameraRig({
       );
       desiredPosition
         .addScaledVector(rightVector, 0.45);
-      desiredTarget.copy(boatPosition).addScaledVector(forwardVector, 18).add(new Vector3(0, 1.8, 0));
+      desiredTarget.copy(boatPosition).addScaledVector(forwardVector, Math.min(18, boatLengthM * 0.55)).add(new Vector3(0, 1.8, 0));
     } else if (viewMode === "backward") {
       // Camera ahead of the bow looking aft to see wake/astern traffic.
       const orbitHeading = heading + 0 + yawOffset;
       const polar = Math.min(1.42, Math.max(0.98, 1.16 + pitchOffset));
-      const distance = Math.max(18.5, boatLengthM * 1.08);
+      const distance = Math.max(10, boatLengthM * 1.17);
       const horizontalRadius = Math.sin(polar) * distance;
       const verticalOffset = Math.cos(polar) * distance;
 
@@ -120,7 +120,7 @@ export function SimCameraRig({
       );
       desiredPosition.addScaledVector(rightVector, -0.45);
       // Look back toward the stern
-      desiredTarget.copy(boatPosition).addScaledVector(forwardVector, -18).add(new Vector3(0, 1.8, 0));
+      desiredTarget.copy(boatPosition).addScaledVector(forwardVector, -Math.min(18, boatLengthM * 0.55)).add(new Vector3(0, 1.8, 0));
     } else {
       // Tender follow camera: closer, lower, off to a side slightly
       const orbitHeading = heading + Math.PI + yawOffset;

@@ -88,6 +88,8 @@ export type MarinaWind = {
 };
 
 export type MarinaLayout = {
+  /** Arrival exercise used when opening this location. */
+  defaultSpawnId?: string;
   id: string;
   name: string;
   /** Chart to draw the shoreline, depths and OSM structures from. Defaults to `id`. */

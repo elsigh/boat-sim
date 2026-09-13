@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { TwinEngineState } from "@/hooks/useEngineState";
+import { DEFAULT_ENGINE, type EngineSpecification } from "@/lib/sim/engine-dynamics";
+import { TURBO_RPM } from "@/lib/sim/turbo-controls";
 
 type EngineVoice = {
   outputGain: GainNode;
@@ -11,6 +13,8 @@ type EngineVoice = {
   /** Combustion rumble: noise + low fundamental, gated by the firing pulses. */
   combustionGain: GainNode;
   combustionFilter: BiquadFilterNode;
+  fundFilter: BiquadFilterNode;
+  exhaustFilter: BiquadFilterNode;
   fundOsc: OscillatorNode;
   fundGain: GainNode;
   /** Exhaust burble band, ungated. */
@@ -27,6 +31,7 @@ type EngineAudioRig = {
   context: AudioContext;
   port: EngineVoice;
   starboard: EngineVoice;
+  specification: EngineSpecification;
 };
 
 const AUDIO_MUTED_STORAGE_KEY = "boat-sim:audio-muted";
@@ -51,6 +56,7 @@ export type EngineAudioState = {
   audioEnabled: boolean;
   audioSupported: boolean;
   enableAudio: (nextEnabled?: boolean) => void;
+  getAudioContext: () => AudioContext | null;
 };
 
 function setTarget(param: AudioParam, value: number, time: number, slew = 0.08) {
@@ -79,7 +85,6 @@ function createNoiseBuffer(context: AudioContext) {
 // "putt putt putt"; opening the throttle raises the rate, the filter
 // brightness, and the exhaust burble together.
 const IDLE_FIRING_HZ = 11;
-const FULL_FIRING_HZ = 34;
 
 function createPulseCurve() {
   const samples = 1024;
@@ -202,6 +207,8 @@ function createEngineVoice(
     starterOsc,
     combustionGain,
     combustionFilter,
+    fundFilter,
+    exhaustFilter,
     fundOsc,
     fundGain,
     exhaustGain,
@@ -216,16 +223,23 @@ function updateVoice(
   voice: EngineVoice,
   context: AudioContext,
   engine: TwinEngineState["port"],
+  specification: EngineSpecification,
 ) {
   const time = context.currentTime;
   const demand = Math.abs(engine.effectiveThrottle);
-  const revs = Math.max(0, Math.min(1, (engine.rpm - 650) / (2400 - 650)));
+  const revs = Math.max(0, Math.min(1, (engine.rpm - specification.idleRpm) / (specification.maxRpm - specification.idleRpm)));
+  // Pitch follows over-revs, so raising the turbo ceiling also sounds faster.
+  const boost = Math.max(0, Math.min(3, (Math.min(TURBO_RPM, engine.rpm) - specification.maxRpm) / (specification.maxRpm * 3)));
+  const petrol = specification.fuel === "petrol";
   const engaged = engine.starting || engine.running;
   const firingHz = engine.running
-    ? IDLE_FIRING_HZ + voice.firingOffsetHz + revs * (FULL_FIRING_HZ - IDLE_FIRING_HZ)
+    ? (specification.idlePulseHz + voice.firingOffsetHz + revs * (specification.fullPulseHz - specification.idlePulseHz)) * (1 + boost * 1.4)
     : 7;
 
-  setTarget(voice.outputGain.gain, engaged ? 0.5 : 0.0001, time, 0.12);
+  setTarget(voice.outputGain.gain, engaged ? (petrol ? 0.34 : 0.5) : 0.0001, time, 0.12);
+  voice.fundOsc.type = petrol ? "sawtooth" : "triangle";
+  setTarget(voice.fundFilter.frequency, (petrol ? 220 + revs * 850 : 170 + revs * 120) + boost * 900, time, 0.12);
+  setTarget(voice.exhaustFilter.frequency, (petrol ? 480 + revs * 1100 : 330 + revs * 160) + boost * 1400, time, 0.12);
   setTarget(voice.starterGain.gain, engine.starting ? 0.11 : 0.0001, time, 0.04);
   setTarget(voice.starterOsc.frequency, engine.starting ? 14 + demand * 4 : 10, time, 0.06);
 
@@ -240,7 +254,7 @@ function updateVoice(
   );
   setTarget(
     voice.combustionFilter.frequency,
-    engine.running ? 130 + demand * 240 : 90,
+    engine.running ? (petrol ? 240 + revs * 700 : 130 + demand * 240) : 90,
     time,
     0.1,
   );
@@ -257,15 +271,21 @@ function syncRigVoices(
   rig: EngineAudioRig,
   engineState: Pick<TwinEngineState, "port" | "starboard">,
 ) {
-  updateVoice(rig.port, rig.context, engineState.port);
-  updateVoice(rig.starboard, rig.context, engineState.starboard);
+  updateVoice(rig.port, rig.context, engineState.port, rig.specification);
+  updateVoice(rig.starboard, rig.context, engineState.starboard, rig.specification);
 }
 
-export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
+export function useEngineAudio(engineState: TwinEngineState, specification: EngineSpecification = DEFAULT_ENGINE): EngineAudioState {
   const rigRef = useRef<EngineAudioRig | null>(null);
   const engineStateRef = useRef(engineState);
   const userMutedRef = useRef(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
+  useEffect(() => {
+    if (rigRef.current) {
+      rigRef.current.specification = specification;
+      syncRigVoices(rigRef.current, engineStateRef.current);
+    }
+  }, [specification]);
   const { ignitionPressed, port, starboard } = engineState;
   const audioSupported =
     typeof window === "undefined"
@@ -331,6 +351,7 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
     const noiseBuffer = createNoiseBuffer(context);
     const rig: EngineAudioRig = {
       context,
+      specification,
       // Slightly different firing rates and wobble so the twins drift in and
       // out of sync — the classic two-diesel beat.
       port: createEngineVoice(context, -0.35, noiseBuffer, 0, 0.23),
@@ -415,7 +436,10 @@ export function useEngineAudio(engineState: TwinEngineState): EngineAudioState {
     syncRigVoices(rig, { port, starboard });
   }, [ignitionPressed, port, starboard]);
 
+  const getAudioContext = useCallback(() => rigRef.current?.context ?? null, []);
+
   return {
+    getAudioContext,
     audioEnabled,
     audioSupported,
     enableAudio,

@@ -1,5 +1,10 @@
 "use client";
 
+import type { ImpactIncident } from "@/lib/sim/collision-damage";
+import { DamagedSmallCraft } from "./DamagedSmallCraft";
+import { smallCraftAsset } from "@/lib/boats/valuation";
+import type { TargetDamageSample } from "@/lib/sim/damage-cost";
+
 import { useFrame } from "@react-three/fiber";
 import {
   CoefficientCombineRule,
@@ -26,7 +31,6 @@ import { deriveMoorings } from "./MooredBoats";
 import {
   SMALL_CRAFT_ACCENT_COLORS,
   SMALL_CRAFT_HULL_COLORS,
-  SmallCraft,
   type SmallCraftSpec,
 } from "./SmallCraft";
 
@@ -151,16 +155,23 @@ type TrafficReport = (
   target: Omit<TrafficTarget, "id"> | null,
 ) => void;
 
+const NO_HITS: ImpactIncident[] = [];
+
 function TrafficBoat({
   run,
+  hits,
   onDone,
   onReport,
+  onDamageSample,
 }: {
   run: TrafficRun;
+  hits: ImpactIncident[];
   onDone: () => void;
   onReport: TrafficReport;
+  onDamageSample: TargetDamageSample;
 }) {
   const bodyRef = useRef<RapierRigidBody | null>(null);
+  const vessel = smallCraftAsset(run.spec);
   const progressRef = useRef({
     phase: (run.mode === "depart" ? "out" : "in") as TrafficPhase,
     u: run.mode === "depart" ? FAIRWAY_END_U : 0,
@@ -183,6 +194,11 @@ function TrafficBoat({
       return;
     }
 
+    if (hits.some((hit) => hit.severity === "major" || hit.severity === "severe")) {
+      const p = body.translation();
+      onReport(run.id, { name: run.name, x: p.x, z: p.z, headingDeg: progress.yaw * 180 / Math.PI, sogKnots: 0, lengthM: run.spec.lengthM });
+      return;
+    }
     const step = (CRUISE_SPEED_MPS * delta) / Math.max(1, curveLength);
 
     if (progress.phase === "in") {
@@ -259,7 +275,9 @@ function TrafficBoat({
       colliders={false}
       position={[start.x, 0, start.z]}
     >
+      <group userData={{ vessel, fracture: { key: `traffic:${run.id}`, objectName: `traffic:${run.id}`, width: run.spec.beamM, length: run.spec.lengthM, workJ: run.spec.beamM * run.spec.lengthM * 15_000, vessel } }}>
       <CuboidCollider
+        sensor={hits.some((hit) => hit.fracture)}
         name={`traffic:${run.id}`}
         args={[run.spec.beamM * 0.5, 0.8, run.spec.lengthM * 0.46]}
         position={[0, 0.45, 0]}
@@ -268,20 +286,30 @@ function TrafficBoat({
         restitution={0.05}
         restitutionCombineRule={CoefficientCombineRule.Min}
       />
-      <SmallCraft spec={run.spec} />
+      </group>
+      <DamagedSmallCraft spec={run.spec} hits={hits} bodyRef={bodyRef} onDamageSample={onDamageSample} moored={false} />
     </RigidBody>
   );
 }
 
 export function MarinaTraffic({
+  incidents,
   layout,
   playerBodyRef,
   onTraffic,
+  onDamageSample,
 }: {
   layout: MarinaLayout;
+  incidents: ImpactIncident[];
   playerBodyRef: MutableRefObject<RapierRigidBody | null>;
   onTraffic?: (targets: TrafficTarget[]) => void;
+  onDamageSample: TargetDamageSample;
 }) {
+  const byObject = useMemo(() => {
+    const map = new Map<string, ImpactIncident[]>();
+    for (const hit of incidents) if (hit.surface === "traffic") map.set(hit.objectName, [...(map.get(hit.objectName) ?? []), hit]);
+    return map;
+  }, [incidents]);
   const [runs, setRuns] = useState<TrafficRun[]>([]);
   const [retryNonce, setRetryNonce] = useState(0);
   const runIdRef = useRef(0);
@@ -440,7 +468,9 @@ export function MarinaTraffic({
         <TrafficBoat
           key={run.id}
           run={run}
+          hits={byObject.get(`traffic:${run.id}`) ?? NO_HITS}
           onReport={report}
+          onDamageSample={onDamageSample}
           onDone={() =>
             setRuns((current) => current.filter((entry) => entry.id !== run.id))
           }

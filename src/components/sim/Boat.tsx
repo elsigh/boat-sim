@@ -7,6 +7,7 @@ import {
   RigidBody,
   RoundCuboidCollider,
   useBeforePhysicsStep,
+  useRapier,
 } from "@react-three/rapier";
 import { type MutableRefObject, useEffect, useRef } from "react";
 import { Quaternion, Vector3 } from "three";
@@ -19,12 +20,15 @@ import {
   type DockingTelemetry,
 } from "@/lib/sim/boat-physics";
 import type { SimulationEnvironment } from "@/lib/sim/boat-physics";
-import type { ImpactIncident, RawImpact } from "@/lib/sim/collision-damage";
+import { closingSpeedAtContact, type ImpactIncident, type RawImpact } from "@/lib/sim/collision-damage";
+import { damageHandling, stepVesselDamage, type VesselDamage } from "@/lib/sim/vessel-damage";
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
+import { fractureAlongSweep } from "@/lib/sim/structural-collision";
 
 import { BoatVisual } from "./BoatVisual";
 import { WashEffects } from "./WashEffects";
 import { WakeTrail } from "./WakeTrail";
+import { turboThrustMultiplier } from "@/lib/sim/engine-dynamics";
 
 type BoatProps = {
   bodyRef: MutableRefObject<RapierRigidBody | null>;
@@ -40,6 +44,8 @@ type BoatProps = {
     damping: number; // N per m/s along the rode
   } | null;
   hullDamageMarks: ImpactIncident[];
+  damageRef: MutableRefObject<VesselDamage>;
+  onDamageSample: (damage: VesselDamage) => void;
   initialPose: {
     position: [number, number, number];
     yawDeg: number;
@@ -108,6 +114,8 @@ export function Boat({
   environment,
   anchorConfig,
   hullDamageMarks,
+  damageRef,
+  onDamageSample,
   initialPose,
   onImpact,
   onPositionSample,
@@ -116,6 +124,9 @@ export function Boat({
   resetRequest,
   turboActive,
 }: BoatProps) {
+  const { world, colliderStates } = useRapier();
+  const damageSampleClock = useRef(0);
+  const preStepYawRateRef = useRef(0);
   const controlsRef = useRef(controls);
   const engineStateRef = useRef(engineState);
   const telemetryRef = useRef(onTelemetry);
@@ -125,7 +136,6 @@ export function Boat({
   const boatRef = useRef(boat);
   const environmentRef = useRef(environment);
   const resetRequestRef = useRef(resetRequest);
-  const turboActiveRef = useRef(turboActive);
   const groundedRef = useRef(grounded);
   const appliedResetIdRef = useRef<number | null>(null);
 
@@ -174,10 +184,6 @@ export function Boat({
   }, [bodyRef, resetRequest]);
 
   useEffect(() => {
-    turboActiveRef.current = turboActive;
-  }, [turboActive]);
-
-  useEffect(() => {
     groundedRef.current = grounded;
   }, [grounded]);
 
@@ -195,6 +201,19 @@ export function Boat({
       appliedResetIdRef.current = pendingReset.id;
     }
 
+    const previousDamage = damageRef.current;
+    damageRef.current = stepVesselDamage(previousDamage, world.timestep, boatRef.current.massKg);
+    damageSampleClock.current += world.timestep;
+    if (damageSampleClock.current >= 0.1) {
+      damageSampleClock.current = 0;
+      onDamageSample(damageRef.current);
+    }
+    if (!groundedRef.current && damageRef.current.sinking <= 0.3) {
+      fractureAlongSweep(world, body, boatRef.current.massKg, world.timestep,
+        (collider) => colliderStates.get(collider.handle)?.object.parent?.userData.fracture,
+        (hit) => impactRef.current?.(hit));
+    }
+    const condition = damageHandling(damageRef.current);
     const translation = body.translation();
     const rotation = body.rotation();
     const linearVelocity = body.linvel();
@@ -220,7 +239,9 @@ export function Boat({
     worldRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
     worldVelocity.set(linearVelocity.x, linearVelocity.y, linearVelocity.z);
 
-    if (groundedRef.current) {
+    if (groundedRef.current || damageRef.current.sinking >= 1) {
+      preStepVelocityRef.current.set(0, 0, 0);
+      preStepYawRateRef.current = 0;
       body.resetForces(true);
       body.resetTorques(true);
       body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -246,6 +267,7 @@ export function Boat({
     // Contact-force events fire after the solver has already arrested the
     // hull, so impact severity must be judged from the pre-step velocity.
     preStepVelocityRef.current.set(linearVelocity.x, 0, linearVelocity.z);
+    preStepYawRateRef.current = angularVelocity.y;
 
     const result = computeBoatPhysics(
       boatRef.current,
@@ -258,8 +280,9 @@ export function Boat({
       {
         portThrottle: engineStateRef.current.port.running ? engineStateRef.current.port.effectiveThrottle : 0,
         starboardThrottle: engineStateRef.current.starboard.running ? engineStateRef.current.starboard.effectiveThrottle : 0,
-        bowThruster: controlsRef.current.bowThruster,
-        turboSpeedMultiplier: turboActiveRef.current ? 10 : 1,
+        bowThruster: condition.stopped ? 0 : controlsRef.current.bowThruster * Math.max(0, 1 - damageRef.current.floodingPct / 100),
+        portThrustMultiplier: damageRef.current.floodingPct < 1 ? turboThrustMultiplier(engineStateRef.current.port, boatRef.current.engine) : 1,
+        starboardThrustMultiplier: damageRef.current.floodingPct < 1 ? turboThrustMultiplier(engineStateRef.current.starboard, boatRef.current.engine) : 1,
       },
       environmentRef.current,
     );
@@ -268,6 +291,13 @@ export function Boat({
     // previous step's applications must be cleared before this step's are added.
     body.resetForces(true);
     body.resetTorques(true);
+
+    // Floodwater and a distorted hull add resistance relative to the water.
+    if (condition.drag > 0) {
+      const water = environmentRef.current.currentVelocity;
+      const resistance = boatRef.current.massKg * condition.drag * 0.1;
+      body.addForce({ x: -(linearVelocity.x - water.x) * resistance, y: 0, z: -(linearVelocity.z - water.z) * resistance }, true);
+    }
 
     result.applications.forEach((application) => {
       body.addForceAtPoint(application.force, application.point, true);
@@ -314,61 +344,48 @@ export function Boat({
       return;
     }
 
-    const direction = payload.maxForceDirection;
-    impactNormal.set(direction.x, 0, direction.z);
-
-    if (impactNormal.lengthSq() < 1e-9) {
-      return;
-    }
-
-    impactNormal.normalize();
-
-    const velocity = preStepVelocityRef.current;
-    const closingSpeedMps = Math.abs(velocity.dot(impactNormal));
-
-    if (closingSpeedMps < 0.15) {
-      return;
-    }
-
+    if (damageRef.current.sinking > 0.3) return;
     const rotation = body.rotation();
     const translation = body.translation();
-
     impactRotation.set(rotation.x, rotation.y, rotation.z, rotation.w);
-
-    // Place the contact on the hull perimeter in the direction of travel —
-    // the boat always moves toward whatever it just struck.
-    impactLocalVelocity
-      .copy(velocity)
-      .applyQuaternion(impactRotation.clone().invert());
-
-    if (impactLocalVelocity.lengthSq() < 1e-9) {
-      return;
-    }
-
-    impactLocalVelocity.normalize();
-
-    const profile = boatRef.current;
-    const halfBeam = profile.beamM * 0.38 + 0.42;
-    const halfLength = profile.lengthM * 0.39 + 0.42;
-    const scale =
-      1 /
-      Math.sqrt(
-        (impactLocalVelocity.x / halfBeam) ** 2 +
-          (impactLocalVelocity.z / halfLength) ** 2,
-      );
-
-    impactLocalPoint.copy(impactLocalVelocity).multiplyScalar(scale);
     impactTranslation.set(translation.x, translation.y, translation.z);
-    impactWorldPoint
-      .copy(impactLocalPoint)
-      .applyQuaternion(impactRotation)
-      .add(impactTranslation);
+    let contactCount = 0;
+    impactWorldPoint.set(0, 0, 0);
+    world.contactPair(payload.target.collider, payload.other.collider, (manifold) => {
+      for (let i = 0; i < manifold.numSolverContacts(); i++) {
+        const point = manifold.solverContactPoint(i);
+        impactWorldPoint.add(impactLocalPoint.set(point.x, point.y, point.z));
+        contactCount++;
+      }
+    });
+    if (!contactCount) return;
+    impactWorldPoint.divideScalar(contactCount);
+    impactLocalPoint.copy(impactWorldPoint).sub(impactTranslation);
+    impactNormal.set(payload.maxForceDirection.x, 0, payload.maxForceDirection.z).normalize();
+    // The force callback's normal can face either way. Orient it into the target.
+    if (impactNormal.dot(impactLocalPoint) < 0) impactNormal.negate();
+    const other = payload.other.rigidBody;
+    const otherVelocity = other?.velocityAtPoint(impactWorldPoint) ?? { x: 0, y: 0, z: 0 };
+    const velocity = preStepVelocityRef.current;
+    const closingSpeedMps = closingSpeedAtContact(velocity, preStepYawRateRef.current, impactLocalPoint, otherVelocity, impactNormal);
+    if (closingSpeedMps < 0.15) return;
+    impactLocalPoint.applyQuaternion(impactRotation.invert());
+    let targetLocal: { x: number; z: number } | undefined;
+    if (other) {
+      const p = other.translation(), r = other.rotation();
+      impactLocalVelocity.copy(impactWorldPoint).sub(impactTranslation.set(p.x, p.y, p.z))
+        .applyQuaternion(impactRotation.set(r.x, r.y, r.z, r.w).invert());
+      targetLocal = { x: impactLocalVelocity.x, z: impactLocalVelocity.z };
+    }
 
     report({
       otherName: payload.other.colliderObject?.name ?? "",
+      targetVessel: payload.other.colliderObject?.parent?.userData.vessel,
       closingSpeedMps,
       world: { x: impactWorldPoint.x, z: impactWorldPoint.z },
       local: { x: impactLocalPoint.x, z: impactLocalPoint.z },
+      targetLocal,
+      normal: { x: impactNormal.x, z: impactNormal.z },
       atMs: performance.now(),
     });
   };
@@ -391,6 +408,7 @@ export function Boat({
       onContactForce={handleContactForce}
     >
       <RoundCuboidCollider
+        sensor={damageRef.current.sinking > 0.3}
         args={[
           boat.beamM * 0.38,
           0.85,
@@ -404,48 +422,17 @@ export function Boat({
         restitutionCombineRule={CoefficientCombineRule.Min}
       />
 
-      <BoatVisual boat={boat} turboActive={turboActive} bodyRef={bodyRef} environment={environment} grounded={grounded} />
+      <BoatVisual key={resetRequest?.id} boat={boat} turboActive={turboActive} bodyRef={bodyRef} environment={environment} grounded={grounded} damageRef={damageRef} incidents={hullDamageMarks} />
 
-      {/* scars from recorded impacts, pinned to the hull at rub-rail height */}
-      {hullDamageMarks.map((mark) => {
-        const yaw = Math.atan2(mark.local.x, mark.local.z);
-        const big = mark.severity === "major" || mark.severity === "severe";
-
-        return (
-          <group
-            key={`hull-scar-${mark.id}`}
-            position={[mark.local.x * 0.97, big ? 0.22 : 0.34, mark.local.z * 0.97]}
-            rotation={[0, yaw, 0]}
-          >
-            <mesh>
-              <boxGeometry
-                args={big ? [0.85, 0.5, 0.16] : [0.45, 0.2, 0.1]}
-              />
-              <meshStandardMaterial
-                color={big ? "#241f1b" : "#4a423a"}
-                roughness={1}
-              />
-            </mesh>
-            {mark.severity === "severe" ? (
-              <mesh position={[0, -0.28, 0.02]}>
-                <boxGeometry args={[1.2, 0.22, 0.14]} />
-                <meshStandardMaterial color="#150f0c" roughness={1} />
-              </mesh>
-            ) : null}
-          </group>
-        );
-      })}
-
-      <WashEffects
+      {damageRef.current.sinking === 0 ? <WashEffects
         boat={boat}
         controlsRef={controlsRef}
         engineStateRef={engineStateRef}
-        turboActive={turboActive}
         bodyRef={bodyRef}
         environment={environment}
-      />
+      /> : null}
     </RigidBody>
-    <WakeTrail boat={boat} bodyRef={bodyRef} engineStateRef={engineStateRef} environment={environment} resetId={resetRequest?.id} />
+    {damageRef.current.sinking === 0 ? <WakeTrail boat={boat} bodyRef={bodyRef} engineStateRef={engineStateRef} environment={environment} resetId={resetRequest?.id} /> : null}
     </>
   );
 }

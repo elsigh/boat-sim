@@ -170,7 +170,7 @@ export type ScatterPoint = {
  */
 export function scatterTrees(
   chart: ChartData,
-  { density = 1 / 1400, max = 1400, seed = 91, shoreSetbackM = 14 } = {},
+  { density = 1 / 1400, max = 1400, seed = 91, shoreSetbackM = 14, maxPerRing = 420 } = {},
 ): ScatterPoint[] {
   const random = mulberry32(seed);
   const solids = chart.land.filter((ring) => !ring.hole && ring.areaM2 > 900);
@@ -179,7 +179,7 @@ export function scatterTrees(
 
   for (const ring of solids) {
     const bounds = ringBounds(ring.points);
-    const wanted = Math.min(420, Math.round(ring.areaM2 * density));
+    const wanted = Math.min(maxPerRing, Math.round(ring.areaM2 * density));
     let attempts = 0;
 
     for (let placed = 0; placed < wanted && attempts < wanted * 14; attempts += 1) {

@@ -1,4 +1,5 @@
 import type { BoatConfiguration } from "@/lib/sim/boat-physics";
+import { DEFAULT_ENGINE, type EngineSpecification } from "@/lib/sim/engine-dynamics";
 
 export type BoatVisualProfile = {
   /** Overall silhouette family for visuals. */
@@ -27,6 +28,7 @@ export type BoatVisualProfile = {
   upperHelmOffsetZRatio: number;
   upperHelmWidthRatio: number;
   windowColor: string;
+  topsides?: "grand-banks" | "nordhavn-55" | "nordhavn-86" | "bowrider" | "corsair" | "settantotto" | "crescent";
 };
 
 // Helm appearance (bezels, instrument style, plotter palette) lives in
@@ -67,11 +69,17 @@ export type BoatProfile = {
   };
   summary: string;
   visual: BoatVisualProfile;
-  economics?: {
-    /** Estimated replacement value (USD). Used for cost-of-damage estimates. */
-    replacementValueUsd?: number;
-    /** Rough cost-per-% hull damage. If omitted, a nonlinear model is used. */
-    costPerPctDamageUsd?: number;
+  engine: EngineSpecification;
+  handling: {
+    nominalMaxKnots: number;
+    planingOnsetKnots?: number;
+    /** The control adapter used by this simulator, where it differs from the boat. */
+    controlNote?: string;
+  };
+  economics: {
+    /** Estimated value of an equivalent boat (USD), accounting for model/age.
+     * Reviewed September 2026; rationale and sources in docs/vessel-values.md. */
+    replacementValueUsd: number;
   };
 } & BoatConfiguration;
 
@@ -130,11 +138,13 @@ export const BOAT_CATALOG: BoatProfile[] = [
     throttleExponent: 2.704,
     throttleLinearBlend: 0.0285,
     waterLinearDragSurge: 720,
-    waterLinearDragSway: 18_000,
+    // A little more keel resistance settles sideways slide without changing
+    // the measured cruise RPM/speed or the heavy hull's fore-and-aft momentum.
+    waterLinearDragSway: 20_160,
     waterDragSurge: 250,
-    waterDragSway: 12_000,
-    yawLinearDrag: 120_000,
-    yawDrag: 180_000,
+    waterDragSway: 13_440,
+    yawLinearDrag: 127_200,
+    yawDrag: 190_800,
     windageAreaM2: 34,
     windLongitudinalCoefficient: 0.55,
     windLateralCoefficient: 1.2,
@@ -142,7 +152,10 @@ export const BOAT_CATALOG: BoatProfile[] = [
       port: "left",
       starboard: "right",
     },
+    engine: DEFAULT_ENGINE,
+    handling: { nominalMaxKnots: 20 },
     visual: {
+      topsides: "grand-banks",
       hullProfile: "trawler",
       aftDeckLengthRatio: 0.16,
       aftDeckOffsetZRatio: 0.29,
@@ -186,7 +199,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "Yes",
       water: "500 gal",
     },
-    economics: { replacementValueUsd: 1_000_000 },
+    economics: { replacementValueUsd: 750_000 },
   },
   {
     profileSlug: "86-nordhavn-serendipity",
@@ -226,10 +239,12 @@ export const BOAT_CATALOG: BoatProfile[] = [
     engineLongitudinalOffsetM: -((86 + 7 / 12) * 0.3048) * 0.35,
     bowThrusterLongitudinalOffsetM: ((86 + 7 / 12) * 0.3048) * 0.4,
     windCenterLongitudinalOffsetM: ((86 + 7 / 12) * 0.3048) * 0.09,
-    maxForwardThrustN: 16_000,
+    maxForwardThrustN: 23_806,
     maxReverseThrustN: 12_800,
     maxBowThrusterForceN: 8_000,
     maxPropWalkForceN: 1_500,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.22,
     throttleExponent: 1.85,
     throttleLinearBlend: 0.14,
     waterLinearDragSurge: 1_600,
@@ -245,7 +260,25 @@ export const BOAT_CATALOG: BoatProfile[] = [
       port: "left",
       starboard: "right",
     },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "Caterpillar C18",
+      idleRpm: 600,
+      // N86's continuous-duty 600 hp rating, rather than the faster leisure tune.
+      maxRpm: 1800,
+      reverseRpm: 1200,
+      startupMs: 2100,
+      throttleRisePerSecond: 1.15,
+      rpmResponse: 2.5,
+      idlePulseHz: 9,
+      fullPulseHz: 30,
+    },
+    handling: {
+      nominalMaxKnots: 12,
+      controlNote: "Twin shafts and bow thruster; the listed stern thruster is not simulated.",
+    },
     visual: {
+      topsides: "nordhavn-86",
       hullProfile: "superyacht",
       aftDeckLengthRatio: 0.12,
       aftDeckOffsetZRatio: 0.22,
@@ -281,7 +314,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       engineNotes: "Twin Caterpillar C18, 600 hp each",
       fuel: "7,000 gal",
       holding: "250 gal black / 210 gal grey",
-      loa: "87' 7\"",
+      loa: "86' 7\"",
       maxSpeed: "12 kn",
       sleeps: 6,
       sternThruster: "Yes",
@@ -289,7 +322,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "Yes",
       water: "900 gal",
     },
-    economics: { replacementValueUsd: 7_500_000 },
+    economics: { replacementValueUsd: 6_500_000 },
   },
   {
     profileSlug: "55-nordhavn-penalty-box-iii",
@@ -306,7 +339,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       "A long‑range, full‑displacement passagemaker with walk‑around engine room. We model close‑quarters handling conservatively to reflect the single‑screw pedigree while keeping twin‑lever control for simulator consistency.",
     highlights: [
       "Full‑displacement trawler hull",
-      "Single main + wing engine on most hulls",
+      "John Deere main engine with auxiliary wing engine",
       "Massive fuel capacity for range",
     ],
     homePort: "Bellingham, WA",
@@ -322,10 +355,12 @@ export const BOAT_CATALOG: BoatProfile[] = [
     engineLongitudinalOffsetM: -(17.09 * 0.36),
     bowThrusterLongitudinalOffsetM: 17.09 * 0.43,
     windCenterLongitudinalOffsetM: 17.09 * 0.12,
-    maxForwardThrustN: 9_800,
+    maxForwardThrustN: 12_842,
     maxReverseThrustN: 7_600,
     maxBowThrusterForceN: 3_800,
     maxPropWalkForceN: 820,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.22,
     throttleExponent: 1.85,
     throttleLinearBlend: 0.16,
     waterLinearDragSurge: 1_050,
@@ -338,7 +373,24 @@ export const BOAT_CATALOG: BoatProfile[] = [
     windLongitudinalCoefficient: 0.60,
     windLateralCoefficient: 1.35,
     propellerHandedness: { port: "left", starboard: "right" },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "John Deere 6081",
+      idleRpm: 650,
+      maxRpm: 2300,
+      reverseRpm: 1300,
+      startupMs: 1800,
+      throttleRisePerSecond: 1.5,
+      rpmResponse: 3.5,
+      idlePulseHz: 10,
+      fullPulseHz: 32,
+    },
+    handling: {
+      nominalMaxKnots: 9,
+      controlNote: "Twin-lever approximation of a single main and wing engine; independent rudder and stern thruster are not simulated.",
+    },
     visual: {
+      topsides: "nordhavn-55",
       hullProfile: "trawler",
       aftDeckLengthRatio: 0.14,
       aftDeckOffsetZRatio: 0.26,
@@ -368,21 +420,21 @@ export const BOAT_CATALOG: BoatProfile[] = [
     stats: {
       beam: "18' 0\"",
       cabins: 3,
-      cruiseSpeed: "9–10 kn",
+      cruiseSpeed: "7.5 kn",
       displacement: "124,500 lb",
       draft: "6' 6\"",
-      engineNotes: "Typically single main + wing; simulated with twin levers",
+      engineNotes: "John Deere 330 hp main + auxiliary wing engine",
       fuel: "2,250 gal",
-      holding: "—",
+      holding: "230 gal",
       loa: "56' 1\"",
-      maxSpeed: "11–12 kn",
+      maxSpeed: "9 kn",
       sleeps: 6,
-      sternThruster: "No",
-      thruster: "Bow thruster",
+      sternThruster: "Yes",
+      thruster: "Bow and stern thrusters",
       stabilizers: "Yes",
-      water: "—",
+      water: "600 gal",
     },
-    economics: { replacementValueUsd: 2_200_000 },
+    economics: { replacementValueUsd: 1_500_000 },
   },
   {
     profileSlug: "2026-cranchi-e26-rider",
@@ -401,23 +453,26 @@ export const BOAT_CATALOG: BoatProfile[] = [
     simStatus: "experimental",
     label: "Cranchi E26 Rider",
     massKg: 2_170,
-    lengthM: 7.85,
+    lengthM: 8.10,
     beamM: 2.49,
     engineLateralOffsetM: 2.49 * 0.25,
     forwardYawAuthorityScale: 1.18,
     reverseYawAuthorityScale: 0.82,
-    engineLongitudinalOffsetM: -(7.85 * 0.28),
-    bowThrusterLongitudinalOffsetM: 7.85 * 0.40,
-    windCenterLongitudinalOffsetM: 7.85 * 0.10,
+    engineLongitudinalOffsetM: -(8.10 * 0.28),
+    bowThrusterLongitudinalOffsetM: 8.10 * 0.40,
+    windCenterLongitudinalOffsetM: 8.10 * 0.10,
     maxForwardThrustN: 3_600,
     maxReverseThrustN: 2_600,
     maxBowThrusterForceN: 0,
     maxPropWalkForceN: 160,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.025,
     throttleExponent: 1.55,
     throttleLinearBlend: 0.22,
-    waterLinearDragSurge: 180,
+    waterLinearDragSurge: 50,
     waterLinearDragSway: 2_800,
-    waterDragSurge: 90,
+    waterDragSurge: 6.376,
+    waterDragAstern: 280,
     waterDragSway: 1_600,
     yawLinearDrag: 9_800,
     yawDrag: 16_000,
@@ -425,7 +480,26 @@ export const BOAT_CATALOG: BoatProfile[] = [
     windLongitudinalCoefficient: 0.50,
     windLateralCoefficient: 1.08,
     propellerHandedness: { port: "left", starboard: "right" },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "300–350 hp outboard",
+      fuel: "petrol",
+      idleRpm: 650,
+      maxRpm: 6000,
+      reverseRpm: 2200,
+      startupMs: 750,
+      throttleRisePerSecond: 2.8,
+      rpmResponse: 8,
+      idlePulseHz: 22,
+      fullPulseHz: 115,
+    },
+    handling: {
+      nominalMaxKnots: 41,
+      planingOnsetKnots: 14,
+      controlNote: "Single outboard represented by two virtual thrust channels. Use both levers for speed and split them to turn; no bow thruster.",
+    },
     visual: {
+      topsides: "bowrider",
       hullProfile: "express",
       aftDeckLengthRatio: 0.08,
       aftDeckOffsetZRatio: 0.12,
@@ -457,11 +531,11 @@ export const BOAT_CATALOG: BoatProfile[] = [
       cabins: 0,
       cruiseSpeed: "24–28 kn",
       displacement: "2,170 kg (dry)",
-      draft: "0.90 m",
+      draft: "0.83 m",
       engineNotes: "Outboard 300–350 hp (approx.)",
-      fuel: "270 L",
+      fuel: "280 L",
       holding: "—",
-      loa: "7.85 m",
+      loa: "8.10 m",
       maxSpeed: "40+ kn (engine dependent)",
       sleeps: 0,
       sternThruster: "No",
@@ -469,7 +543,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "No",
       water: "70 L",
     },
-    economics: { replacementValueUsd: 190_000 },
+    economics: { replacementValueUsd: 225_000 },
   },
   {
     profileSlug: "2026-cranchi-settantotto-78",
@@ -497,15 +571,18 @@ export const BOAT_CATALOG: BoatProfile[] = [
     engineLongitudinalOffsetM: -(25.15 * 0.33),
     bowThrusterLongitudinalOffsetM: 25.15 * 0.42,
     windCenterLongitudinalOffsetM: 25.15 * 0.11,
-    maxForwardThrustN: 18_500,
+    maxForwardThrustN: 36_500,
     maxReverseThrustN: 14_200,
     maxBowThrusterForceN: 6_400,
     maxPropWalkForceN: 1_200,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.025,
     throttleExponent: 1.78,
     throttleLinearBlend: 0.16,
-    waterLinearDragSurge: 1_350,
+    waterLinearDragSurge: 900,
     waterLinearDragSway: 48_000,
-    waterDragSurge: 420,
+    waterDragSurge: 115.063,
+    waterDragAstern: 1_100,
     waterDragSway: 24_000,
     yawLinearDrag: 440_000,
     yawDrag: 680_000,
@@ -513,7 +590,25 @@ export const BOAT_CATALOG: BoatProfile[] = [
     windLongitudinalCoefficient: 0.62,
     windLateralCoefficient: 1.40,
     propellerHandedness: { port: "left", starboard: "right" },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "Volvo Penta D13 IPS",
+      idleRpm: 600,
+      maxRpm: 2300,
+      reverseRpm: 1300,
+      startupMs: 1600,
+      throttleRisePerSecond: 1.4,
+      rpmResponse: 3.5,
+      idlePulseHz: 13,
+      fullPulseHz: 42,
+    },
+    handling: {
+      nominalMaxKnots: 31,
+      planingOnsetKnots: 16,
+      controlNote: "Triple IPS represented by twin thrust groups. Joystick pod vectoring and stern thruster are not simulated.",
+    },
     visual: {
+      topsides: "settantotto",
       hullProfile: "flybridge",
       aftDeckLengthRatio: 0.12,
       aftDeckOffsetZRatio: 0.18,
@@ -545,9 +640,9 @@ export const BOAT_CATALOG: BoatProfile[] = [
       cabins: 4,
       cruiseSpeed: "24–28 kn",
       displacement: "57,000 kg (light)",
-      draft: "~1.9 m",
+      draft: "1.93 m",
       engineNotes: "3× Volvo Penta D13‑IPS1350 (3×1000 hp)",
-      fuel: "~5,900 L (typical fitout)",
+      fuel: "5,920 L",
       holding: "—",
       loa: "82' 6\" (25.15 m)",
       maxSpeed: "30+ kn",
@@ -557,7 +652,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "Yes",
       water: "~1,200 L",
     },
-    economics: { replacementValueUsd: 6_000_000 },
+    economics: { replacementValueUsd: 5_000_000 },
   },
   {
     profileSlug: "2005-chris-craft-corsair-36",
@@ -587,11 +682,14 @@ export const BOAT_CATALOG: BoatProfile[] = [
     maxReverseThrustN: 4_800,
     maxBowThrusterForceN: 0,
     maxPropWalkForceN: 380,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.025,
     throttleExponent: 1.60,
     throttleLinearBlend: 0.20,
-    waterLinearDragSurge: 380,
+    waterLinearDragSurge: 100,
     waterLinearDragSway: 6_800,
-    waterDragSurge: 150,
+    waterDragSurge: 8.045,
+    waterDragAstern: 510,
     waterDragSway: 3_600,
     yawLinearDrag: 22_000,
     yawDrag: 36_000,
@@ -599,7 +697,26 @@ export const BOAT_CATALOG: BoatProfile[] = [
     windLongitudinalCoefficient: 0.52,
     windLateralCoefficient: 1.10,
     propellerHandedness: { port: "left", starboard: "right" },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "Petrol V8 sterndrives",
+      fuel: "petrol",
+      idleRpm: 650,
+      maxRpm: 5000,
+      reverseRpm: 2000,
+      startupMs: 900,
+      throttleRisePerSecond: 2.4,
+      rpmResponse: 7,
+      idlePulseHz: 20,
+      fullPulseHz: 90,
+    },
+    handling: {
+      nominalMaxKnots: 43,
+      planingOnsetKnots: 15,
+      controlNote: "Twin sterndrives modeled with straight thrust; use split levers to turn. No bow thruster.",
+    },
     visual: {
+      topsides: "corsair",
       hullProfile: "express",
       aftDeckLengthRatio: 0.10,
       aftDeckOffsetZRatio: 0.16,
@@ -643,7 +760,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "No",
       water: "~132 L (35 gal)",
     },
-    economics: { replacementValueUsd: 200_000 },
+    economics: { replacementValueUsd: 175_000 },
   },
   {
     profileSlug: "1997-crescent-custom-114",
@@ -658,7 +775,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
     summary: "Classic 114’ semi‑displacement GRP yacht with twin Detroit 16V92TA.",
     description:
       "Large, stable platform for advanced docking practice. Parameters scaled for semi‑displacement handling; powerful thrusters and windage modeled.",
-    highlights: ["Twin Detroit Diesel 16V92TA (~2,900 hp combined)", "Beam ~24.7 ft", "Draft ~6 ft"],
+    highlights: ["Twin Detroit Diesel 16V92TA (~2,900 hp combined)", "Beam ~24 ft", "Draft ~6 ft"],
     simStatus: "experimental",
     label: "Crescent 114",
     massKg: 274_300 * 0.45359237, // approximate, from comparable 115
@@ -670,15 +787,18 @@ export const BOAT_CATALOG: BoatProfile[] = [
     engineLongitudinalOffsetM: -(34.75 * 0.34),
     bowThrusterLongitudinalOffsetM: 34.75 * 0.44,
     windCenterLongitudinalOffsetM: 34.75 * 0.12,
-    maxForwardThrustN: 28_000,
+    maxForwardThrustN: 40_000,
     maxReverseThrustN: 22_000,
     maxBowThrusterForceN: 9_000,
     maxPropWalkForceN: 1_800,
+    // Nominal speed calibration; docking coefficients and reverse thrust remain separate.
+    propellerAdvanceLoss: 0.12,
     throttleExponent: 1.85,
     throttleLinearBlend: 0.14,
-    waterLinearDragSurge: 2_800,
+    waterLinearDragSurge: 1_600,
     waterLinearDragSway: 120_000,
-    waterDragSurge: 680,
+    waterDragSurge: 68.059,
+    waterDragAstern: 1_200,
     waterDragSway: 60_000,
     yawLinearDrag: 1_100_000,
     yawDrag: 1_800_000,
@@ -686,7 +806,24 @@ export const BOAT_CATALOG: BoatProfile[] = [
     windLongitudinalCoefficient: 0.66,
     windLateralCoefficient: 1.52,
     propellerHandedness: { port: "left", starboard: "right" },
+    engine: {
+      ...DEFAULT_ENGINE,
+      label: "Detroit Diesel 16V92TA",
+      idleRpm: 600,
+      maxRpm: 2300,
+      reverseRpm: 1200,
+      startupMs: 2400,
+      throttleRisePerSecond: 1,
+      rpmResponse: 2.2,
+      idlePulseHz: 24,
+      fullPulseHz: 72,
+    },
+    handling: {
+      nominalMaxKnots: 21,
+      controlNote: "Twin shafts and bow thruster; the listed stern thruster is not simulated.",
+    },
     visual: {
+      topsides: "crescent",
       hullProfile: "superyacht",
       aftDeckLengthRatio: 0.14,
       aftDeckOffsetZRatio: 0.20,
@@ -714,7 +851,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       windowColor: "#a1b8c7",
     },
     stats: {
-      beam: "24.7' (approx.)",
+      beam: "24' 0\"",
       cabins: 5,
       cruiseSpeed: "18–20 kn",
       displacement: "≈274,300 lb (comparable 115')",
@@ -730,7 +867,7 @@ export const BOAT_CATALOG: BoatProfile[] = [
       stabilizers: "Yes",
       water: "—",
     },
-    economics: { replacementValueUsd: 5_000_000 },
+    economics: { replacementValueUsd: 2_750_000 },
   },
 ];
 

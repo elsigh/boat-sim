@@ -35,6 +35,7 @@ import {
 } from "./helm/Instruments";
 import { Chip, Lamp, Metric, Panel, PanelHeader, PanelLabel, Readout, Well } from "./helm/Panel";
 import { TimelineImportPanel } from "./helm/TimelineImportPanel";
+import { KeyboardLegend } from "./helm/KeyboardLegend";
 
 type ViewMode = "plan" | "forward" | "backward";
 
@@ -48,6 +49,7 @@ type DockingOverlayProps = {
   currentStopId: string;
   depthFeet?: number;
   engineState: TwinEngineState;
+  suppressEngineStart?: boolean;
   guidance: BerthGuidance | null;
   hardwareHelmConnected: boolean;
   onSelectStop: (stopId: string) => void;
@@ -354,6 +356,7 @@ export function DockingOverlay(props: DockingOverlayProps) {
             <RadioPanel radio={vhfRadio} channel={marina.vhfChannel} />
 
             <EnginePanel
+              boat={selectedBoat}
               engineState={engineState}
               instrument={theme.instrument}
               onTogglePort={onTogglePortEngine}
@@ -402,7 +405,7 @@ export function DockingOverlay(props: DockingOverlayProps) {
         </>
       )}
 
-      {!enginesRunning ? (
+      {!enginesRunning && !props.suppressEngineStart ? (
         <EngineStartOverlay
           boatName={selectedBoat.displayName}
           engineNotes={selectedBoat.stats.engineNotes}
@@ -508,6 +511,7 @@ function CameraPanel({
         >
           <AudioIcon enabled={audioEnabled} muted={!audioSupported || !audioEnabled} />
         </HelmButton>
+        <KeyboardLegend />
         <HelmButton className="hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Hide panels (H)">
           H
         </HelmButton>
@@ -577,7 +581,7 @@ function BoatPlate({
           />
           <Well className="px-2.5 py-2">
             <p className="text-[0.82rem] leading-snug" style={{ color: "var(--helm-text-dim)" }}>
-              {selectedBoat.summary}
+              {selectedBoat.summary}{selectedBoat.handling.controlNote ? ` ${selectedBoat.handling.controlNote}` : ""}
             </p>
           </Well>
           <div className="flex items-center justify-between gap-2">
@@ -826,11 +830,13 @@ function StatusBanner({ text, tone }: { text: string; tone: "good" | "warn" | "d
 // --- right column ---------------------------------------------------------------
 
 function EnginePanel({
+  boat,
   engineState,
   instrument,
   onTogglePort,
   onToggleStarboard,
 }: {
+  boat: BoatProfile;
   engineState: TwinEngineState;
   instrument: "digital" | "analog";
   onTogglePort: () => void;
@@ -839,31 +845,43 @@ function EnginePanel({
   return (
     <Panel>
       <PanelHeader title="Engines" className="!pt-2 !pb-1" />
+      <p className="px-3 pb-1 text-[0.6rem]" style={{ color: "var(--helm-text-dim)" }}>{boat.engine.label} · {boat.engine.maxRpm.toLocaleString()} RPM</p>
       <div className="grid grid-cols-2 gap-2 px-3 pb-2">
         <Tachometer
+          engine={boat.engine}
           armed={engineState.port.masterOn}
           demand={engineState.port.demandThrottle}
           instrument={instrument}
           label="Port"
           onToggle={onTogglePort}
           rpm={engineState.port.rpm}
+          turboActive={engineState.port.turboActive}
           gear={engineState.port.gear}
           shifting={engineState.port.shifting}
           running={engineState.port.running}
           starting={engineState.port.starting}
         />
         <Tachometer
+          engine={boat.engine}
           armed={engineState.starboard.masterOn}
           demand={engineState.starboard.demandThrottle}
           instrument={instrument}
           label="Stbd"
           onToggle={onToggleStarboard}
           rpm={engineState.starboard.rpm}
+          turboActive={engineState.starboard.turboActive}
           gear={engineState.starboard.gear}
           shifting={engineState.starboard.shifting}
           running={engineState.starboard.running}
           starting={engineState.starboard.starting}
         />
+        {(["port", "starboard"] as const).map((side) => (
+          <p key={side} role="status" aria-label={`${side} turbo status`}
+            className="text-center text-[0.55rem] leading-tight"
+            style={{ color: engineState[side].turboActive ? "var(--helm-accent)" : "var(--helm-text-dim)" }}>
+            {engineState[side].turboStatus}
+          </p>
+        ))}
       </div>
     </Panel>
   );

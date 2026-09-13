@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { smoothThrottleCommand, tcaThrottleCommand } from "@/lib/sim/throttle-input";
+import { isTcaQuadrant } from "@/lib/sim/turbo-controls";
 
 export type UseGamepadOptions = {
   gamepadIndex?: number | "auto";
@@ -48,10 +50,15 @@ export type UseGamepadOptions = {
 export type GamepadSnapshot = {
   connected: boolean;
   gamepadId: string | null;
+  /** Retained when keyboard levers are used with the quadrant's buttons. */
+  hardwareGamepadId: string | null;
   gamepadIndex: number;
   throttleMode: "dualAxis" | "splitSlider";
   portThrottle: number;
   starboardThrottle: number;
+  /** Calibrated lever positions before axis smoothing, for immediate switches. */
+  portLever: number;
+  starboardLever: number;
   bowThruster: number;
   splitThrottlePosition: number | null;
   splitThrottleAxis: number | null;
@@ -100,10 +107,13 @@ const SNAPSHOT_CHANGE_EPSILON = 0.0005;
 export const DEFAULT_GAMEPAD_STATE: GamepadSnapshot = {
   connected: false,
   gamepadId: null,
+  hardwareGamepadId: null,
   gamepadIndex: -1,
   throttleMode: "dualAxis",
   portThrottle: 0,
   starboardThrottle: 0,
+  portLever: 0,
+  starboardLever: 0,
   bowThruster: 0,
   splitThrottlePosition: null,
   splitThrottleAxis: null,
@@ -136,10 +146,13 @@ function snapshotsEqual(left: GamepadSnapshot, right: GamepadSnapshot) {
   return (
     left.connected === right.connected &&
     left.gamepadId === right.gamepadId &&
+    left.hardwareGamepadId === right.hardwareGamepadId &&
     left.gamepadIndex === right.gamepadIndex &&
     left.throttleMode === right.throttleMode &&
     nearlyEqual(left.portThrottle, right.portThrottle) &&
     nearlyEqual(left.starboardThrottle, right.starboardThrottle) &&
+    nearlyEqual(left.portLever, right.portLever) &&
+    nearlyEqual(left.starboardLever, right.starboardLever) &&
     nearlyEqual(left.bowThruster, right.bowThruster) &&
     nearlyEqual(left.splitThrottlePosition, right.splitThrottlePosition) &&
     left.splitThrottleAxis === right.splitThrottleAxis &&
@@ -172,21 +185,6 @@ function applyDeadzone(value: number, deadzone: number) {
 
   const magnitude = (Math.abs(value) - deadzone) / (1 - deadzone);
   return Math.sign(value) * magnitude;
-}
-
-function smoothControlValue(
-  previous: number,
-  next: number,
-  smoothing: number,
-  centerSnapThreshold: number,
-) {
-  const filtered = previous + (next - previous) * smoothing;
-
-  if (Math.abs(filtered) <= centerSnapThreshold && Math.abs(next) <= centerSnapThreshold * 1.5) {
-    return 0;
-  }
-
-  return clampUnit(filtered);
 }
 
 function normalizeAxis(value: number | undefined, deadzone: number, invert: boolean) {
@@ -287,34 +285,20 @@ function readGamepad(
         )
       : null;
 
+  const rawButtons = gamepad.buttons.map((button) => button.value);
+  const standardTca = isTcaQuadrant(gamepad.id) && options.invertThrottleAxes && !options.quadrantIdle;
+  const readThrottle = (side: "port" | "starboard") => {
+    const axis = options.throttleAxes[side];
+    // A user-calibrated neutral retains its custom axis mapping.
+    if (options.quadrantIdle) return quadrantAxisToThrottle(gamepad.axes[axis], options.quadrantIdle[side], options.deadzone, options.invertThrottleAxes);
+    if (standardTca && (axis === 0 || axis === 1)) return tcaThrottleCommand(gamepad.axes[axis], axis, rawButtons, options.deadzone);
+    return normalizeAxis(gamepad.axes[axis], options.deadzone, options.invertThrottleAxes);
+  };
+
   const portThrottle =
-    splitThrottle?.portThrottle ??
-    (options.quadrantIdle
-      ? quadrantAxisToThrottle(
-          gamepad.axes[options.throttleAxes.port],
-          options.quadrantIdle.port,
-          options.deadzone,
-          options.invertThrottleAxes,
-        )
-      : normalizeAxis(
-          gamepad.axes[options.throttleAxes.port],
-          options.deadzone,
-          options.invertThrottleAxes,
-        ));
+    splitThrottle?.portThrottle ?? readThrottle("port");
   const starboardThrottle =
-    splitThrottle?.starboardThrottle ??
-    (options.quadrantIdle
-      ? quadrantAxisToThrottle(
-          gamepad.axes[options.throttleAxes.starboard],
-          options.quadrantIdle.starboard,
-          options.deadzone,
-          options.invertThrottleAxes,
-        )
-      : normalizeAxis(
-          gamepad.axes[options.throttleAxes.starboard],
-          options.deadzone,
-          options.invertThrottleAxes,
-        ));
+    splitThrottle?.starboardThrottle ?? readThrottle("starboard");
 
   const bowFromButtons =
     (gamepad.buttons[options.bowThrusterButtons.starboard]?.value ?? 0) -
@@ -332,15 +316,18 @@ function readGamepad(
   return {
     connected: gamepad.connected,
     gamepadId: gamepad.id,
+    hardwareGamepadId: gamepad.id,
     gamepadIndex: gamepad.index,
     throttleMode: options.throttleMode,
     portThrottle,
     starboardThrottle,
+    portLever: portThrottle,
+    starboardLever: starboardThrottle,
     bowThruster: clampUnit(bowFromAxis || bowFromButtons),
     splitThrottlePosition: splitThrottle?.position ?? null,
     splitThrottleAxis: splitThrottle ? options.splitThrottleAxis : null,
     rawAxes: [...gamepad.axes],
-    rawButtons: gamepad.buttons.map((button) => button.value),
+    rawButtons,
     updatedAt: performance.now(),
   };
 }
@@ -358,10 +345,13 @@ function buildKeyboardSnapshot(
   return {
     connected: active,
     gamepadId: active ? "Keyboard Helm" : null,
+    hardwareGamepadId: null,
     gamepadIndex: 0,
     throttleMode: "dualAxis",
     portThrottle,
     starboardThrottle,
+    portLever: portThrottle,
+    starboardLever: starboardThrottle,
     bowThruster,
     splitThrottlePosition: null,
     splitThrottleAxis: null,
@@ -517,6 +507,7 @@ export function useGamepad(options?: UseGamepadOptions) {
         // while the keys have the throttle.
         if (gamepadSnapshot.connected) {
           keyboardSnapshot.rawButtons = gamepadSnapshot.rawButtons;
+          keyboardSnapshot.hardwareGamepadId = gamepadSnapshot.hardwareGamepadId;
         }
 
         return keyboardSnapshot;
@@ -542,19 +533,19 @@ export function useGamepad(options?: UseGamepadOptions) {
       updateKeyboardThrottle(deltaSeconds);
       const rawSnapshot = readSnapshot();
       smoothedControls = {
-        portThrottle: smoothControlValue(
+        portThrottle: smoothThrottleCommand(
           smoothedControls.portThrottle,
           rawSnapshot.portThrottle,
           resolvedOptions.axisSmoothing,
           resolvedOptions.centerSnapThreshold,
         ),
-        starboardThrottle: smoothControlValue(
+        starboardThrottle: smoothThrottleCommand(
           smoothedControls.starboardThrottle,
           rawSnapshot.starboardThrottle,
           resolvedOptions.axisSmoothing,
           resolvedOptions.centerSnapThreshold,
         ),
-        bowThruster: smoothControlValue(
+        bowThruster: smoothThrottleCommand(
           smoothedControls.bowThruster,
           rawSnapshot.bowThruster,
           Math.min(0.5, resolvedOptions.axisSmoothing * 1.5),

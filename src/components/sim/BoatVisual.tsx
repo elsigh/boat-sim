@@ -19,6 +19,12 @@ import {
   type Texture,
 } from "three";
 
+import type { ImpactIncident } from "@/lib/sim/collision-damage";
+import { damagePose, type VesselDamage } from "@/lib/sim/vessel-damage";
+import { HullScars, type HullScar } from "./HullScars";
+import { VesselDistress } from "./VesselDistress";
+import { VesselBreakup } from "./VesselBreakup";
+import { FleetTopsides } from "./FleetTopsides";
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { SimulationEnvironment } from "@/lib/sim/boat-physics";
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
@@ -111,7 +117,7 @@ function createTaperedBoxGeometry({
   return geometry;
 }
 
-function useHullGeometry(beamM: number, lengthM: number) {
+function useHullGeometry(beamM: number, lengthM: number, freeboard: number) {
   return useMemo(() => {
     const outline = buildHullShape(beamM, lengthM).getPoints(48);
     const rings = [
@@ -124,7 +130,7 @@ function useHullGeometry(beamM: number, lengthM: number) {
     const indices: number[] = [];
     const geometry = new BufferGeometry();
     for (const ring of rings) {
-      for (const point of outline) positions.push(point.x * ring.width, ring.y, point.y * ring.length);
+      for (const point of outline) positions.push(point.x * ring.width, ring.y + freeboard * Math.max(0, (ring.y + 0.64) / 1.15), point.y * ring.length);
     }
     for (let ring = 0; ring < rings.length - 1; ring++) {
       const start = indices.length;
@@ -139,7 +145,7 @@ function useHullGeometry(beamM: number, lengthM: number) {
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
     return geometry;
-  }, [beamM, lengthM]);
+  }, [beamM, lengthM, freeboard]);
 }
 
 function useTeakTexture() {
@@ -447,145 +453,7 @@ function TrawlerTopsides({ boat, teakTexture }: { boat: BoatProfile; teakTexture
   );
 }
 
-function ExpressTopsides({ boat }: { boat: BoatProfile }) {
-  const L = boat.lengthM;
-  const B = boat.beamM;
-
-  // Lower, sleeker house; longer foredeck; minimal arch; no flybridge bench.
-  const coachGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.32,
-        bowHalfWidth: B * 0.22,
-        height: 0.52,
-        length: L * 0.28,
-      }),
-    [B, L],
-  );
-  const windscreenZ = -L * 0.04;
-  const hardtopGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.34,
-        bowHalfWidth: B * 0.28,
-        height: 0.12,
-        length: L * 0.32,
-      }),
-    [B, L],
-  );
-  return (
-    <group>
-      {/* low coachroof */}
-      <mesh castShadow receiveShadow geometry={coachGeometry} position={[0, DECK_Y + 0.28, -L * 0.04]}>
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
-      </mesh>
-      {/* wrap windscreen */}
-      <mesh position={[0, DECK_Y + 0.48, windscreenZ]} rotation={[-0.22, 0, 0]}>
-        <boxGeometry args={[B * 0.62, 0.28, 0.04]} />
-        <meshStandardMaterial color={new Color(COLORS.glass)} metalness={0.5} roughness={0.12} />
-      </mesh>
-      {/* hardtop */}
-      <mesh castShadow receiveShadow geometry={hardtopGeometry} position={[0, DECK_Y + 0.62, -L * 0.10]}>
-        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.5} />
-      </mesh>
-      {/* radar mast stub */}
-      <mesh castShadow position={[0, DECK_Y + 0.86, -L * 0.14]}>
-        <boxGeometry args={[B * 0.18, 0.08, 0.16]} />
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.5} />
-      </mesh>
-    </group>
-  );
-}
-
-function FlybridgeTopsides({ boat }: { boat: BoatProfile }) {
-  // Similar to trawler, but broader upper volumes and more forward flybridge.
-  const L = boat.lengthM;
-  const B = boat.beamM;
-  const salonGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.38,
-        bowHalfWidth: B * 0.32,
-        height: HOUSE_TOP_Y - DECK_Y + 0.06,
-        length: L * 0.40,
-      }),
-    [B, L],
-  );
-  const roofGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.40,
-        bowHalfWidth: B * 0.34,
-        height: ROOF_TOP_Y - HOUSE_TOP_Y + 0.06,
-        length: L * 0.60,
-      }),
-    [B, L],
-  );
-  return (
-    <group>
-      <mesh castShadow receiveShadow geometry={salonGeometry} position={[0, DECK_Y, -L * 0.11]}>
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
-      </mesh>
-      <mesh castShadow receiveShadow geometry={roofGeometry} position={[0, HOUSE_TOP_Y + 0.02, -L * 0.16]}>
-        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.5} />
-      </mesh>
-      {/* larger flybridge coaming */}
-      <mesh castShadow position={[0, ROOF_TOP_Y + 0.46, -L * 0.18]}>
-        <boxGeometry args={[B * 0.54, 0.42, 0.7]} />
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.55} />
-      </mesh>
-      {/* wrap windshield */}
-      <mesh position={[0, ROOF_TOP_Y + 0.78, -L * 0.12]} rotation={[-0.28, 0, 0]}>
-        <boxGeometry args={[B * 0.54, 0.34, 0.04]} />
-        <meshStandardMaterial color={new Color(COLORS.glass)} metalness={0.45} roughness={0.12} />
-      </mesh>
-    </group>
-  );
-}
-
-function SuperyachtTopsides({ boat }: { boat: BoatProfile }) {
-  const L = boat.lengthM;
-  const B = boat.beamM;
-  // Chunkier house volumes, taller boat deck, bigger mast.
-  const houseGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.40,
-        bowHalfWidth: B * 0.35,
-        height: HOUSE_TOP_Y - DECK_Y + 0.18,
-        length: L * 0.48,
-      }),
-    [B, L],
-  );
-  const boatDeckGeometry = useMemo(
-    () =>
-      createTaperedBoxGeometry({
-        aftHalfWidth: B * 0.44,
-        bowHalfWidth: B * 0.38,
-        height: 0.24,
-        length: L * 0.26,
-      }),
-    [B, L],
-  );
-  return (
-    <group>
-      <mesh castShadow receiveShadow geometry={houseGeometry} position={[0, DECK_Y + 0.02, -L * 0.12]}>
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.6} />
-      </mesh>
-      <mesh castShadow receiveShadow geometry={boatDeckGeometry} position={[0, HOUSE_TOP_Y + 0.24, -L * 0.18]}>
-        <meshStandardMaterial color={new Color(COLORS.roof)} roughness={0.55} />
-      </mesh>
-      <mesh castShadow position={[0, HOUSE_TOP_Y + 0.56, -L * 0.18]}>
-        <boxGeometry args={[B * 0.30, 0.16, 0.28]} />
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.5} />
-      </mesh>
-      <mesh castShadow position={[0, HOUSE_TOP_Y + 0.80, -L * 0.18]} scale={[1, 0.75, 1]}>
-        <sphereGeometry args={[0.34, 16, 12]} />
-        <meshStandardMaterial color={new Color(COLORS.house)} roughness={0.45} />
-      </mesh>
-    </group>
-  );
-}
+const NO_IMPACTS: ImpactIncident[] = [];
 
 export function BoatVisual({
   boat,
@@ -593,22 +461,75 @@ export function BoatVisual({
   bodyRef,
   environment,
   grounded = false,
+  damageRef,
+  incidents = NO_IMPACTS,
 }: {
   boat: BoatProfile;
   turboActive: boolean;
   bodyRef?: MutableRefObject<RapierRigidBody | null>;
   environment?: SimulationEnvironment;
   grounded?: boolean;
+  damageRef?: MutableRefObject<VesselDamage>;
+  incidents?: ImpactIncident[];
 }) {
   const visualRef = useRef<Group | null>(null);
-  const hullGeometry = useHullGeometry(boat.beamM, boat.lengthM);
-  const gunwaleGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 1, 0.035, 0.515);
-  const deckGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 0.9, 0.07, DECK_Y);
+  const form = boat.visual.topsides;
+  const sport = form === "bowrider" || form === "corsair";
+  const freeboard = form === "nordhavn-86" ? 1.0 : form === "crescent" ? 0.95 : form === "settantotto" ? 0.65 : form === "nordhavn-55" ? 0.5 : form === "bowrider" ? -0.4 : form === "corsair" ? -0.15 : 0;
+  const intactHullGeometry = useHullGeometry(boat.beamM, boat.lengthM, freeboard);
+  const gunwaleGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 1, 0.035, 0.515 + freeboard);
+  const deckGeometry = useHullCapGeometry(boat.beamM, boat.lengthM, 0.9, 0.07, DECK_Y + freeboard);
   const teakTexture = useTeakTexture();
   const motionPosition = useMemo(() => new Vector3(), []);
-  const capRailGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.985, 0.56, 0.05);
+  const capRailGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.985, 0.56 + freeboard, 0.05);
   const rubRailGeometry = useRailGeometry(boat.beamM, boat.lengthM, 1.006, 0.02, 0.05);
-  const lifelineGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.955, 1.18, 0.024);
+  const intactLifelineGeometry = useRailGeometry(boat.beamM, boat.lengthM, 0.955, 1.18 + freeboard, 0.024);
+  const scars = useMemo<HullScar[]>(() => {
+    const outline = buildHullShape(boat.beamM, boat.lengthM).getPoints(160);
+    return incidents.slice(-24).map((hit) => {
+      let index = 0, nearest = Infinity;
+      outline.forEach((p, i) => {
+        const distance = (p.x - hit.local.x) ** 2 + (p.y - hit.local.z) ** 2;
+        if (distance < nearest) { nearest = distance; index = i; }
+      });
+      const point = outline[index], a = outline[Math.max(0, index - 1)], b = outline[Math.min(outline.length - 1, index + 1)];
+      const yaw = Math.atan2(a.y - b.y, b.x - a.x);
+      const structural = hit.severity === "major" || hit.severity === "severe";
+      const radius = structural ? Math.min(1.5, boat.beamM * 0.25) * (hit.severity === "severe" ? 1.25 : 0.85) : 0.35;
+      // Hull tapers below the gunwale. Put exposed laminate on that surface.
+      return { hit, x: point.x * 0.948, z: point.y * 0.992, yaw, radius };
+    });
+  }, [boat.beamM, boat.lengthM, incidents]);
+  const hullGeometry = useMemo(() => {
+    const geometry = intactHullGeometry.clone();
+    const p = geometry.getAttribute("position");
+    for (let i = 0; i < p.count; i++) {
+      let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      for (const scar of scars) {
+        if (scar.hit.severity === "scuff" || scar.hit.severity === "minor") continue;
+        const d = Math.hypot(x - scar.x, z - scar.z);
+        const weight = Math.max(0, 1 - d / (scar.radius * 1.8));
+        const dent = weight * weight * (scar.hit.severity === "severe" ? 0.6 : 0.28);
+        x -= Math.sin(scar.yaw) * dent; z -= Math.cos(scar.yaw) * dent;
+        y -= dent * Math.max(0, y + 0.5) * 0.5;
+      }
+      p.setXYZ(i, x, y, z);
+    }
+    geometry.computeVertexNormals(); return geometry;
+  }, [intactHullGeometry, scars]);
+  const lifelineGeometry = useMemo(() => {
+    const geometry = intactLifelineGeometry.clone();
+    const index = geometry.getIndex(), p = geometry.getAttribute("position");
+    if (!index) return geometry;
+    const kept: number[] = [];
+    for (let i = 0; i < index.count; i += 3) {
+      const vertex = index.getX(i);
+      if (scars.some((s) => (s.hit.severity === "major" || s.hit.severity === "severe") && Math.hypot(p.getX(vertex) - s.x, p.getZ(vertex) - s.z) < s.radius)) continue;
+      kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+    }
+    geometry.setIndex(kept); return geometry;
+  }, [intactLifelineGeometry, scars]);
+  const nearbyDamage = (x: number, z: number) => scars.find((s) => (s.hit.severity === "major" || s.hit.severity === "severe") && Math.hypot(x - s.x, z - s.z) < s.radius * 1.5);
   const stanchions = useStanchionPositions(boat.beamM, boat.lengthM, 0.955);
   const fenderStations = useMemo(() => {
     const outline = buildHullShape(boat.beamM, boat.lengthM).getPoints(100).filter((p) => p.x > 0);
@@ -618,6 +539,11 @@ export function BoatVisual({
       return { z, x: nearest.x * 0.94 + 0.12 };
     });
   }, [boat.beamM, boat.lengthM]);
+
+  useEffect(() => () => {
+    for (const geometry of [intactHullGeometry, gunwaleGeometry, deckGeometry, capRailGeometry, rubRailGeometry, intactLifelineGeometry]) geometry.dispose();
+  }, [intactHullGeometry, gunwaleGeometry, deckGeometry, capRailGeometry, rubRailGeometry, intactLifelineGeometry]);
+  useEffect(() => () => { hullGeometry.dispose(); lifelineGeometry.dispose(); }, [hullGeometry, lifelineGeometry]);
 
   useFrame((state, delta) => {
     const visual = visualRef.current;
@@ -640,12 +566,26 @@ export function BoatVisual({
       const halfBeam = boat.beamM * 0.4;
       const wave = (x: number, z: number) => sampleWaterHeight(x, z, state.clock.elapsedTime, environment);
       const { x, z } = motionPosition;
-      targetLift += wave(x, z) * 0.45;
+      const motionResponse = Math.min(1.35, Math.max(0.22, Math.sqrt(26308 / boat.massKg)));
+      targetLift += wave(x, z) * 0.45 * motionResponse;
       targetPitch += Math.max(-0.025, Math.min(0.025, (wave(x - dx * halfLength, z - dz * halfLength) - wave(x + dx * halfLength, z + dz * halfLength)) / (halfLength * 2)));
       targetRoll = Math.max(-0.025, Math.min(0.025, (wave(x + dz * halfBeam, z - dx * halfBeam) - wave(x - dz * halfBeam, z + dx * halfBeam)) / (halfBeam * 2)));
       const velocity = body.linvel();
       const surge = (velocity.x - environment.currentVelocity.x) * dx + (velocity.z - environment.currentVelocity.z) * dz;
-      targetPitch -= Math.min(0.032, Math.max(0, surge) ** 2 * 0.0005);
+      targetRoll *= motionResponse;
+      if (boat.handling.planingOnsetKnots) {
+        const speedKnots = Math.max(0, surge) / 0.514444;
+        const onset = boat.handling.planingOnsetKnots;
+        const lift = Math.min(1, Math.max(0, (speedKnots - onset * 0.7) / onset));
+        // Rise onto plane, then settle the bow as speed builds beyond the hump.
+        targetLift += lift * (sport ? 0.14 : 0.23);
+        targetPitch -= 0.065 * Math.exp(-(((speedKnots - onset) / (onset * 0.65)) ** 2)) * Math.min(1, speedKnots / 4) + lift * 0.016;
+        targetRoll += Math.max(-0.10, Math.min(0.10, -body.angvel().y * Math.max(0, surge) * 0.012));
+      } else targetPitch -= Math.min(0.032, Math.max(0, surge) ** 2 * 0.0005);
+    }
+    if (damageRef) {
+      const pose = damagePose(damageRef.current, boat.lengthM);
+      targetPitch += pose.pitch; targetRoll += pose.roll; targetLift -= pose.sinkDepth;
     }
     visual.rotation.x += (targetPitch - visual.rotation.x) * smoothing;
     visual.rotation.z += (targetRoll - visual.rotation.z) * smoothing;
@@ -654,6 +594,7 @@ export function BoatVisual({
 
   return (
     <group ref={visualRef}>
+      <VesselBreakup damageRef={damageRef} lengthM={boat.lengthM} beamM={boat.beamM}>
       <mesh castShadow receiveShadow geometry={hullGeometry}>
         <meshStandardMaterial
           attach="material-0"
@@ -669,18 +610,18 @@ export function BoatVisual({
         <meshStandardMaterial color={boat.visual.hullColor} roughness={0.4} />
       </mesh>
       <mesh receiveShadow geometry={deckGeometry}>
-        <meshStandardMaterial map={teakTexture} roughness={0.72} />
+        <meshStandardMaterial map={form === "bowrider" ? undefined : teakTexture} color={form === "bowrider" ? "#d8d8d0" : "#ffffff"} roughness={0.72} />
       </mesh>
 
       <mesh castShadow geometry={capRailGeometry}>
-        <meshStandardMaterial color={new Color(COLORS.teakDark)} roughness={0.65} />
+        <meshStandardMaterial color={form === "grand-banks" ? COLORS.teakDark : form === "corsair" ? "#734a32" : COLORS.stainless} metalness={form === "grand-banks" ? 0 : sport ? 0.35 : 0.65} roughness={form === "grand-banks" ? 0.65 : 0.3} />
       </mesh>
 
       <mesh geometry={rubRailGeometry}>
-        <meshStandardMaterial color={new Color(COLORS.teakDark)} roughness={0.7} />
+        <meshStandardMaterial color={form === "grand-banks" ? COLORS.teakDark : "#333b40"} roughness={0.45} />
       </mesh>
 
-      <mesh geometry={lifelineGeometry}>
+      {!sport ? <><mesh geometry={lifelineGeometry}>
         <meshStandardMaterial
           color={new Color(COLORS.stainless)}
           metalness={0.85}
@@ -688,7 +629,7 @@ export function BoatVisual({
         />
       </mesh>
       {stanchions.map((point, index) => (
-        <mesh key={`stanchion-${index}`} position={[point.x, (DECK_Y + 1.18) / 2, point.y]}>
+        <mesh key={`stanchion-${index}`} position={[point.x, (DECK_Y + 1.18) / 2 + freeboard, point.y]} rotation={[nearbyDamage(point.x, point.y) ? 0.6 : 0, 0, nearbyDamage(point.x, point.y) ? -0.8 : 0]}>
           <cylinderGeometry args={[0.02, 0.02, 1.18 - DECK_Y, 6]} />
           <meshStandardMaterial
             color={new Color(COLORS.stainless)}
@@ -698,9 +639,11 @@ export function BoatVisual({
         </mesh>
       ))}
 
+      </> : null}
+
       {/* Paired sidelights: red to port (+x), green to starboard (-x). */}
       {[-1, 1].map((side) => (
-        <group key={`nav-${side}`} position={[side * boat.beamM * 0.34, 1.37, boat.lengthM * 0.065]}>
+        <group key={`nav-${side}`} position={[side * boat.beamM * 0.34, 1.37 + freeboard, boat.lengthM * 0.065]}>
           <mesh><boxGeometry args={[0.12, 0.12, 0.22]} /><meshStandardMaterial color="#22302f" roughness={0.4} /></mesh>
           <mesh position={[side * 0.065, 0, 0]}>
             <sphereGeometry args={[0.045, 8, 6]} />
@@ -709,35 +652,32 @@ export function BoatVisual({
         </group>
       ))}
       {[-0.36, 0.31].flatMap((z) => [-1, 1].map((side) => (
-        <group key={`cleat-${z}-${side}`} position={[side * boat.beamM * (z > 0 ? 0.22 : 0.37), DECK_Y + 0.045, boat.lengthM * z]}>
+        <group key={`cleat-${z}-${side}`} position={[side * boat.beamM * (z > 0 ? 0.22 : 0.37), DECK_Y + 0.045 + freeboard, boat.lengthM * z]}>
           <mesh><boxGeometry args={[0.1, 0.035, 0.32]} /><meshStandardMaterial color={COLORS.stainless} metalness={0.8} roughness={0.28} /></mesh>
           <mesh position={[0, 0.07, 0]}><boxGeometry args={[0.06, 0.05, 0.38]} /><meshStandardMaterial color={COLORS.stainless} metalness={0.8} roughness={0.28} /></mesh>
         </group>
       )))}
 
-      {/* swim platform tucked against the transom */}
-      <mesh castShadow position={[0, 0.05, -boat.lengthM * 0.475 - 0.28]}>
-        <boxGeometry args={[boat.beamM * 0.58, 0.07, 0.85]} />
+      {/* Outboard uses two boarding steps, leaving the center clear for the motor. */}
+      {(form === "bowrider" ? [-1, 1] : [0]).map((side) => <mesh key={side} castShadow position={[side * boat.beamM * 0.29, 0.05, -boat.lengthM * 0.475 - 0.28]}>
+        <boxGeometry args={[boat.beamM * (form === "bowrider" ? 0.22 : form === "grand-banks" ? 0.58 : 0.64), 0.07, form === "grand-banks" ? 0.85 : Math.max(0.55, boat.lengthM * boat.visual.swimPlatformLengthRatio * 0.7)]} />
         <meshStandardMaterial map={teakTexture} roughness={0.72} />
-      </mesh>
+      </mesh>)}
 
       {/* fenders along both rails — this is a docking boat, after all */}
       {fenderStations.flatMap(({ x, z }, index) => [-1, 1].map((side) => (
-        <group key={`fender-${index}-${side}`} position={[side * x, 0, z]}>
-          <mesh position={[0, 0.37, 0]}><cylinderGeometry args={[0.009, 0.009, 0.34, 5]} /><meshStandardMaterial color="#b4a58a" roughness={0.95} /></mesh>
+        <group visible={!nearbyDamage(side * x, z)} key={`fender-${index}-${side}`} position={[side * x, 0, z]}>
+          <mesh position={[0, 0.37 + freeboard / 2, 0]}><cylinderGeometry args={[0.009, 0.009, Math.max(0.06, 0.34 + freeboard), 5]} /><meshStandardMaterial color="#b4a58a" roughness={0.95} /></mesh>
           <mesh position={[0, -0.15, 0]}><capsuleGeometry args={[0.14, 0.42, 4, 10]} /><meshStandardMaterial color="#f2f4f2" roughness={0.6} /></mesh>
         </group>
       )))}
 
-      {boat.visual.hullProfile === "express" ? (
-        <ExpressTopsides boat={boat} />
-      ) : boat.visual.hullProfile === "flybridge" ? (
-        <FlybridgeTopsides boat={boat} />
-      ) : boat.visual.hullProfile === "superyacht" ? (
-        <SuperyachtTopsides boat={boat} />
-      ) : (
-        <TrawlerTopsides boat={boat} teakTexture={teakTexture} />
-      )}
+      <HullScars scars={scars} />
+      <group position={[0, freeboard, 0]}>
+        {form && form !== "grand-banks" ? <FleetTopsides boat={boat} texture={teakTexture} /> : <TrawlerTopsides boat={boat} teakTexture={teakTexture} />}
+      </group>
+      </VesselBreakup>
+      {damageRef ? <VesselDistress damageRef={damageRef} lengthM={boat.lengthM} beamM={boat.beamM} freeboard={freeboard} environment={environment} /> : null}
     </group>
   );
 }

@@ -385,10 +385,12 @@ export function DockingCelebration({
   active,
   celebrationId,
   berth,
+  quiet = false,
 }: {
   active: boolean;
   celebrationId: number;
   berth: Berth | null;
+  quiet?: boolean;
 }) {
   if (!active || !berth) {
     return null;
@@ -396,8 +398,7 @@ export function DockingCelebration({
 
   return (
     <group key={celebrationId}>
-      <Fireworks berth={berth} />
-      <DolphinPod berth={berth} />
+      {quiet ? null : <><Fireworks berth={berth} /><DolphinPod berth={berth} /></>}
       <DockLines berth={berth} />
     </group>
   );

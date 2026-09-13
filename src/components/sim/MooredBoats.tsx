@@ -4,8 +4,9 @@ import {
   CoefficientCombineRule,
   CuboidCollider,
   RigidBody,
+  type RapierRigidBody,
 } from "@react-three/rapier";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 
 import { offset } from "@/lib/marinas/builders";
 import { sceneDocks } from "@/lib/marinas/scene";
@@ -14,9 +15,13 @@ import type { MarinaLayout } from "@/lib/marinas/types";
 import {
   SMALL_CRAFT_ACCENT_COLORS,
   SMALL_CRAFT_HULL_COLORS,
-  SmallCraft,
   type SmallCraftSpec,
 } from "./SmallCraft";
+
+import type { ImpactIncident } from "@/lib/sim/collision-damage";
+import { DamagedSmallCraft } from "./DamagedSmallCraft";
+import { smallCraftAsset } from "@/lib/boats/valuation";
+import type { TargetDamageSample } from "@/lib/sim/damage-cost";
 
 const CONTACT_FRICTION = 0.05;
 const CONTACT_RESTITUTION = 0.05;
@@ -161,31 +166,27 @@ export function deriveMoorings(layout: MarinaLayout): Mooring[] {
   return moorings;
 }
 
-export const MooredBoats = memo(function MooredBoats({ layout }: { layout: MarinaLayout }) {
-  const moorings = useMemo(() => deriveMoorings(layout), [layout]);
+const MooredCraft = memo(function MooredCraft({ mooring, hits, onDamageSample }: { mooring: Mooring; hits: ImpactIncident[]; onDamageSample: TargetDamageSample }) {
+  const bodyRef = useRef<RapierRigidBody | null>(null);
+  const vessel = smallCraftAsset(mooring.spec);
+  return <RigidBody ref={bodyRef} type="kinematicPosition" colliders={false}
+    position={[mooring.position[0], 0, mooring.position[1]]} rotation={[0, mooring.headingDeg * Math.PI / 180, 0]}>
+    <group userData={{ vessel, fracture: { key: `moored:${mooring.id}`, objectName: `moored:${mooring.id}`, width: mooring.spec.beamM, length: mooring.spec.lengthM, workJ: mooring.spec.beamM * mooring.spec.lengthM * 15_000, vessel } }}>
+    <CuboidCollider sensor={hits.some((hit) => hit.fracture)} name={`moored:${mooring.id}`} args={[mooring.spec.beamM * 0.5, 0.8, mooring.spec.lengthM * 0.46]}
+      position={[0, 0.45, 0]} friction={CONTACT_FRICTION} frictionCombineRule={CoefficientCombineRule.Min}
+      restitution={CONTACT_RESTITUTION} restitutionCombineRule={CoefficientCombineRule.Min} />
+    </group>
+    <DamagedSmallCraft spec={mooring.spec} hits={hits} bodyRef={bodyRef} onDamageSample={onDamageSample} />
+  </RigidBody>;
+});
 
-  return (
-    <>
-      {moorings.map((mooring) => (
-        <RigidBody
-          key={`moored-${mooring.id}`}
-          type="fixed"
-          colliders={false}
-          position={[mooring.position[0], 0, mooring.position[1]]}
-          rotation={[0, (mooring.headingDeg * Math.PI) / 180, 0]}
-        >
-          <CuboidCollider
-            name={`moored:${mooring.id}`}
-            args={[mooring.spec.beamM * 0.5, 0.8, mooring.spec.lengthM * 0.46]}
-            position={[0, 0.45, 0]}
-            friction={CONTACT_FRICTION}
-            frictionCombineRule={CoefficientCombineRule.Min}
-            restitution={CONTACT_RESTITUTION}
-            restitutionCombineRule={CoefficientCombineRule.Min}
-          />
-          <SmallCraft spec={mooring.spec} />
-        </RigidBody>
-      ))}
-    </>
-  );
+const NO_HITS: ImpactIncident[] = [];
+export const MooredBoats = memo(function MooredBoats({ layout, incidents, onDamageSample }: { layout: MarinaLayout; incidents: ImpactIncident[]; onDamageSample: TargetDamageSample }) {
+  const moorings = useMemo(() => deriveMoorings(layout), [layout]);
+  const byObject = useMemo(() => {
+    const map = new Map<string, ImpactIncident[]>();
+    for (const hit of incidents) if (hit.surface === "moored") map.set(hit.objectName, [...(map.get(hit.objectName) ?? []), hit]);
+    return map;
+  }, [incidents]);
+  return <>{moorings.map((mooring) => <MooredCraft key={mooring.id} mooring={mooring} hits={byObject.get(`moored:${mooring.id}`) ?? NO_HITS} onDamageSample={onDamageSample} />)}</>;
 });

@@ -114,7 +114,7 @@ jobs:
       - name: Test
         run: |
           node --test scripts/release-version.test.cjs
-          bun test src/lib
+          bun test src
       - name: Export the offline app
         run: |
           pnpm run export

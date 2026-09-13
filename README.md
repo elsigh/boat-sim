@@ -68,10 +68,27 @@ airplane-to-boat mismatch: swap-levers for reversed axes, idle-detent
 calibration so lever travel above the detent means ahead and below means
 astern, and the quadrant's switches double as engine masters and ignition.
 
+With the standard TCA mapping, the centre detent is neutral (zero propeller
+thrust). The entire forward travel progressively adds power, with gentle
+low-speed response and smooth engine spool-up; the first notch does not pin
+the engine at idle. Returning to neutral
+disengages drive immediately; the engine continues idling, and the boat can
+still coast or drift. A saved custom neutral calibration takes precedence.
+
 No hardware? Keyboard works: `W`/`S` port throttle, `I`/`K` starboard,
 `A`/`D` bow thruster, `Space` both levers to neutral. Start with both levers
 in neutral. (Use Chrome for the quadrant — Safari never exposes
 it.)
+
+For turbo, push a lever fully ahead and press its TCA handle side button
+(USB buttons 1/2). Each button toggles only that engine toward **20,000 RPM**;
+press again or pull that lever back to cancel. **Swap levers** also swaps these
+buttons. `T` toggles both eligible engines; pressing `T` while either is boosted
+turns both off. The engine must already be running. Held buttons do not repeat,
+and restarting, disconnecting the quadrant, or opening the plotter clears boost.
+Turbo checks the actual lever position, so pressing as it reaches full travel
+works while the engine spools up. The status below each tach shows when turbo
+is ready. The keyboard button beside mute opens the full controls legend.
 
 ## What's in the sim
 
@@ -89,8 +106,9 @@ it.)
   rather than sketches: Squalicum, Sucia (Fossil Bay), Reid Harbor, Roche
   Harbor, Friday Harbor, Jones Island, and Eagle Harbor. The shoreline is the
   NOAA DEM's zero contour, the depths under the keel are that same survey, and
-  the docks at Squalicum, Roche and Friday are OpenStreetMap's mapping of the
-  actual floats, finger by finger. See *Charts*, below.
+  the main docks at Squalicum, Roche and Friday follow OpenStreetMap. Roche's
+  missing finger floats are reconstructed from its published marina plan.
+  See *Charts*, below.
 - **Arrivals you'd actually make** — every harbour has a *passage* exercise
   that starts where the real approach starts. Reid Harbor's begins in Spieden
   Channel, two and a half miles out: round the west end of Spieden, north past
@@ -103,17 +121,39 @@ it.)
   One theme file, no per-boat branching in the components.
 - **Consequences** — hit something hard enough and the hull takes damage:
   scuff, minor, major, severe, judged by closing speed at the point of
-  contact. Gelcoat cracks stay on the hull; splintered timber stays on the
-  dock. Restarting the exercise repairs everything, which is cheaper than
-  the real arrangement.
+  contact, including the other vessel's motion and your hull's rotation.
+  Fender touches stay harmless. Hard hits crush the hull, bend rails, tear
+  pieces out of floats, and throw timber and fiberglass into the water with
+  thuds, cracks and splashes. Neighboring boats rock, lose their way, and
+  retain their own damage. Violent machinery-space impacts can start fires;
+  serious breaches overwhelm the automatic bilge pump, reduce propulsion,
+  produce a list, and eventually sink the boat. Flooding puts the fire out.
+  Fast rams break individual timber bays before the collision solver can
+  stop the hull. Each bay absorbs energy, leaving the boat's remaining
+  momentum to carry it through the next obstacle. Destroyed bays and pilings
+  stay gone until restart; stone breakwaters and shore remain solid. Repeated
+  impacts split the actual boat model into hull, deck and cabin sections,
+  disable the drives and accelerate flooding. Smaller boats can be shattered
+  and knocked aside too. Larger impacts throw deck slabs, splinters and spray
+  with layered timber cracks and splash sounds.
+  This is a gameplay approximation with compressed flooding times, not a
+  naval stability model. Expanding the plotter pauses progression; sound
+  follows the existing mute control. **Repair & restart** restores the boat
+  and marina and clears debris.
 - **A lived-in marina** — finger slips are two-thirds full of moored boats,
   the occasional small craft runs the fairway in or out, and the VHF panel
-  murmurs synthesized harbor chatter if you leave it monitoring.
+  murmurs synthesized harbor chatter if you leave it monitoring. Curved hulls,
+  recessed cockpits, glazed cabins and detailed rigging distinguish express
+  cruisers, raised-pilothouse boats, flybridge yachts and sailing sloops.
+  Docked boats hang fenders; passing boats stow them. Details are combined into
+  seven or eight material batches per boat and remain part of its collision wreckage.
 - **Guidance that respects land** — the wayline is a live shortest-water-path
   (A* over a per-marina navigation grid) from wherever you are to the berth,
   replanned as you drift. It goes around docks, pilings, and moored boats,
   never through them.
-- **Turbo mode** — press `T` at full throttle. It is not seamanship.
+- **Turbo mode** — independent 20,000 RPM engine boosts, with matching tachs,
+  sound and prop wash. Extra thrust acts at each propeller, so boosting just one
+  side turns the boat. Use the TCA handle buttons or `T` at full ahead.
 
 ## Charts
 
@@ -152,6 +192,37 @@ squashed north-south by a third. Mt Constitution landed 1.1 km from where it
 lives, and several berths ended up on the beach. `check_georef.py` catches it by
 sampling the DEM at OSM coastline nodes, which should read zero: it searches a
 grid of offsets and the best fit has to be (0, 0).
+
+### Roche Harbor
+
+Roche uses the existing elevation raster for sloping hills behind the marina,
+with evergreen woodland, Hotel de Haro, the chapel, the main pier market and
+village buildings placed from OpenStreetMap footprints. A larger house with
+steep roofs, dormers and turrets sits on the ridge as an architectural impression
+of the approach view. Its identity and exact site have not been verified; it is
+not a measured replica.
+
+The [2025 marina map](https://www.rocheharbor.com/wp-content/uploads/2025/01/MarinaMap2025-1.pdf)
+and [April 2026 resort map](https://www.rocheharbor.com/wp-content/uploads/2026/04/Roche-Harbor-Resort-Map.pdf)
+inform the layout. OSM supplies the main walkways and end ties; 159 missing
+finger floats use nominal lengths and scaled spacing from the plan. I-9 points
+bow-in toward its walkway, and the H Dock exercise targets the outer end tie.
+Those slip placements are reconstructions, not surveyed berth positions.
+The plotter, guidance and collision model use the same combined dock geometry.
+
+Completing a Roche arrival replaces the usual fireworks with a personal nod to
+the resort's [sunset colors ceremony](https://www.rocheharbor.com/activities/colors/):
+**taps → cannon → answering boat horns**, with lowering flags and a small cannon
+puff at the pier. This is an adaptation, not the full flags-and-anthems ritual.
+Taps is a bundled public-domain U.S. Army Band recording; attribution is in
+`public/audio/ATTRIBUTION.md`. Cannon and horns use WebAudio. Sound respects the
+mute control, captions continue while muted, and Skip/Replay let you control
+the sequence. Restarting or leaving the exercise cancels it. A departure that
+starts already docked does not trigger the ceremony.
+
+`bun test` covers the relief mesh's shoreline/lagoon footprint, upward faces,
+Roche berth clearance and depth, and ceremony timing alongside the handling
+and saved-route tests.
 
 ### The regional basemap
 
@@ -266,6 +337,26 @@ frames the whole thing and the parts with no chart under them draw over the grey
 no-data area. Panning or fitting detaches the view from the boat; **Recentre on the boat**
 puts it back.
 
+## Fleet
+
+The fleet shares the water-relative force model, clutch dwell, wakes, and themed
+helms. Each boat now has its own engine RPM range, starting and throttle response,
+and synthesized exhaust character. The Nordhavns have raised pilothouses and
+tender decks; the E26 has an open bow and outboard; the Corsair has a low foredeck
+and open cockpit; the Settantotto and Crescent have distinct flybridge layouts.
+Planing profiles add visual bow rise and banking, while heavy boats respond less
+to waves. Small-boat camera framing scales with hull length.
+
+Nominal calm-water top speeds are 20 kn for Bonum Vitae, 12 for Serendipity,
+9 for Penalty Box III, 41 for the E26, 31 for the Settantotto, 43 for the Corsair,
+and 21 for the Crescent. Calibration includes air resistance as well as hull
+drag and propeller advance. Planing profiles have separate transom-first drag
+so reduced ahead resistance does not produce planing speeds in reverse.
+These are approximate simulator targets; boat load, engine options and sea
+state change real performance. Engine sounds are synthesized, not recordings
+of these specific vessels. The E26, Nordhavn 55 and triple-IPS boat retain
+their twin-lever control approximations, described in each vessel profile.
+
 ## Running it
 
 ```bash
@@ -273,8 +364,10 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000, pick a marina and an exercise, `START ENGINES`,
-and try to dock without appearing in the incident log. `H` hides the panels.
+Open http://localhost:3000 and `START ENGINES` to approach slip I-9 at Roche
+Harbor. The last selected boat and location are remembered in session storage
+for the current tab and restored on reload; a valid `?boat=` link overrides the
+remembered boat. Pick another marina or exercise at any time. `H` hides the panels.
 
 The Electron desktop build (`pnpm app:dev` / `pnpm app:build`) wraps the
 static export for offline use aboard.
@@ -282,7 +375,8 @@ static export for offline use aboard.
 Check handling changes with `bun test src/lib/sim/boat-physics.test.ts`, then
 `pnpm typecheck` and `pnpm build`. The focused tests cover clutch transitions,
 prop walk and turning direction, water-relative drift, passive hull resistance,
-coasting and reverse braking, and the Grand Banks cruise calibration. These
+coasting and reverse braking, fleet RPM/speed ranges, astern resistance, and
+the Grand Banks cruise calibration. These
 are a simplified maneuvering model and visual sea state, not a CFD solution
 or sea-trial validation; experimental vessels retain their listed drivetrain
 approximations.

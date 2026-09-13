@@ -19,6 +19,9 @@ type ButtonProps = {
   className?: string;
   title?: string;
   ariaLabel?: string;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
+  popoverTarget?: string;
 };
 
 const SIZES = {
@@ -37,6 +40,9 @@ export function HelmButton({
   className = "",
   title,
   ariaLabel,
+  ariaExpanded,
+  ariaControls,
+  popoverTarget,
 }: ButtonProps) {
   const color = tone === "neutral" ? "var(--helm-text)" : `var(--helm-${tone})`;
 
@@ -46,8 +52,15 @@ export function HelmButton({
       title={title}
       aria-label={ariaLabel}
       aria-pressed={active}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      popoverTarget={popoverTarget}
       disabled={disabled}
       onPointerDown={stopPointer}
+      onKeyDown={(event) => {
+        // Let native button activation win over global helm shortcuts.
+        if (event.key === " " || event.key === "Enter") event.stopPropagation();
+      }}
       onClick={onClick}
       className={`relative rounded-md leading-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--helm-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent disabled:cursor-not-allowed disabled:opacity-45 ${SIZES[size]} ${className}`}
       style={{

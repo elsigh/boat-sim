@@ -2,10 +2,11 @@
 
 import { useFrame } from "@react-three/fiber";
 import { type MutableRefObject, useMemo, useRef } from "react";
-import { Group, Mesh, ShaderMaterial, Quaternion, Vector3 } from "three";
+import { Group, Mesh, ShaderMaterial, Quaternion, Vector2, Vector3 } from "three";
 import type { RapierRigidBody } from "@react-three/rapier";
 import { bowThrusterEffectiveness, type SimulationEnvironment } from "@/lib/sim/boat-physics";
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
+import { wakeNoiseShader } from "@/lib/sim/wake-shaders";
 
 import type { BoatProfile } from "@/lib/boats/catalog";
 import type { GamepadSnapshot } from "@/hooks/useGamepad";
@@ -17,14 +18,15 @@ type WashEffectsProps = {
   environment: SimulationEnvironment;
   controlsRef: MutableRefObject<GamepadSnapshot>;
   engineStateRef: MutableRefObject<TwinEngineState>;
-  turboActive: boolean;
 };
 
 const washVertexShader = `
   varying vec2 vUv;
+  varying vec3 vWorldPosition;
 
   void main() {
     vUv = uv;
+    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -32,36 +34,22 @@ const washVertexShader = `
 const washFragmentShader = `
   uniform float uStrength;
   uniform float uTime;
+  uniform vec2 uCurrent;
   varying vec2 vUv;
-
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  float valueNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
-
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-  }
+  varying vec3 vWorldPosition;
+  ${wakeNoiseShader}
 
   void main() {
-    vec2 centered = vUv - vec2(0.5, 0.5);
-    float radial = length(centered) * 2.0;
-    float churn = valueNoise(vUv * 7.0 + vec2(0.0, uTime * 1.6));
-    float streaks = valueNoise(vUv * vec2(3.0, 14.0) + vec2(0.0, uTime * 2.4));
-    float alpha =
-      (1.0 - smoothstep(0.12, 1.0, radial)) *
-      (0.45 + 0.3 * churn + 0.25 * streaks) *
-      uStrength;
-
-    gl_FragColor = vec4(0.9, 0.96, 1.0, alpha);
+    vec3 foam = wakeFoam(vWorldPosition.xz - uCurrent * uTime, uTime);
+    float radial = length((vUv - 0.5) * 2.0) + (foam.x - 0.5) * 0.25;
+    float edge = 1.0 - smoothstep(0.2, 1.0, radial);
+    float churn = smoothstep(0.18, 0.64, foam.x) * (0.35 + foam.y * 0.65);
+    float alpha = edge * (0.08 + churn * 0.82) * uStrength;
+    vec3 color = mix(vec3(0.18, 0.42, 0.43), vec3(0.9, 0.96, 0.93), churn);
+    if (alpha < 0.004) discard;
+    gl_FragColor = vec4(color, alpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -72,6 +60,7 @@ function useWashUniforms() {
     () => ({
       uStrength: { value: 0 },
       uTime: { value: 0 },
+      uCurrent: { value: new Vector2() },
     }),
     [],
   );
@@ -83,26 +72,20 @@ export function WashEffects({
   environment,
   controlsRef,
   engineStateRef,
-  turboActive,
 }: WashEffectsProps) {
   const flow = useMemo(() => ({ velocity: new Vector3(), rotation: new Quaternion() }), []);
   const portUniforms = useWashUniforms();
   const starboardUniforms = useWashUniforms();
   const bowUniforms = useWashUniforms();
-  const portTurboUniforms = useWashUniforms();
-  const starboardTurboUniforms = useWashUniforms();
   const portMaterialRef = useRef<ShaderMaterial | null>(null);
   const starboardMaterialRef = useRef<ShaderMaterial | null>(null);
   const bowMaterialRef = useRef<ShaderMaterial | null>(null);
-  const portTurboMaterialRef = useRef<ShaderMaterial | null>(null);
-  const starboardTurboMaterialRef = useRef<ShaderMaterial | null>(null);
   const portGroupRef = useRef<Group | null>(null);
   const starboardGroupRef = useRef<Group | null>(null);
   const bowMeshRef = useRef<Mesh | null>(null);
-  const portTurboGroupRef = useRef<Group | null>(null);
-  const starboardTurboGroupRef = useRef<Group | null>(null);
+  const displacement = Math.min(1.8, Math.max(0.55, Math.cbrt(boat.massKg / 26_000)));
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const time = state.clock.elapsedTime;
     const engines = engineStateRef.current;
     const body = liveRigidBody(bodyRef);
@@ -121,32 +104,33 @@ export function WashEffects({
       material: ShaderMaterial | null,
       throttle: number,
       lateralX: number,
+      turboActive: boolean,
     ) => {
       if (!group || !material) {
         return;
       }
 
       const magnitude = Math.min(1, Math.abs(throttle));
-      material.uniforms.uStrength.value = (magnitude > 0.005 ? 0.12 + magnitude * 0.58 : 0) * (turboActive ? 1.4 : 1);
+      material.uniforms.uStrength.value = (magnitude > 0.005 ? Math.min(0.9, (0.16 + magnitude * 0.67) * displacement) : 0) * (turboActive ? 1.2 : 1);
       group.visible = magnitude > 0.005;
       material.uniforms.uTime.value = time;
+      material.uniforms.uCurrent.value.set(environment.currentVelocity.x, environment.currentVelocity.z);
 
       if (throttle >= 0) {
-        // Ahead: wash streams aft of the transom, longer with more power.
-        const length = turboActive
-          ? boat.lengthM * 3.8
-          : 1.8 + magnitude * 5 + Math.max(0, surge) * 0.35;
+        // Only the fresh propeller boil is hull-attached. WakeTrail carries
+        // the rest in the water, so even turbo wash follows a turn naturally.
+        const length = boat.lengthM * (0.1 + magnitude * 0.18) * (turboActive ? 1.35 : 1);
         group.position.set(lateralX, WATER_LOCAL_Y, sternZ - length * 0.42);
         group.scale.set(
-          turboActive ? boat.beamM * 0.9 : 1.6 + magnitude * 0.9,
+          boat.beamM * (0.22 + magnitude * 0.18) * (turboActive ? 1.2 : 1),
           1,
           length,
         );
       } else {
         // Astern: discharge boils forward along the quarter.
-        const length = 2.5 + magnitude * 4.5;
+        const length = boat.lengthM * (0.1 + magnitude * 0.2);
         group.position.set(lateralX * 1.7, WATER_LOCAL_Y, sternZ + 1.2 + length * 0.3);
-        group.scale.set(1.9 + magnitude, 1, length);
+        group.scale.set(boat.beamM * (0.32 + magnitude * 0.24), 1, length);
       }
     };
 
@@ -156,12 +140,14 @@ export function WashEffects({
       portMaterialRef.current,
       engines.port.running ? engines.port.effectiveThrottle : 0,
       boat.engineLateralOffsetM,
+      engines.port.turboActive,
     );
     updateEngineWash(
       starboardGroupRef.current,
       starboardMaterialRef.current,
       engines.starboard.running ? engines.starboard.effectiveThrottle : 0,
       -boat.engineLateralOffsetM,
+      engines.starboard.turboActive,
     );
 
     const bowMesh = bowMeshRef.current;
@@ -171,6 +157,7 @@ export function WashEffects({
       const magnitude = Math.min(1, Math.abs(bowThruster));
       bowMaterial.uniforms.uStrength.value = magnitude * 0.9;
       bowMaterial.uniforms.uTime.value = time;
+      bowMaterial.uniforms.uCurrent.value.set(environment.currentVelocity.x, environment.currentVelocity.z);
       // Water discharges opposite the push: a starboard push (-x) expels to
       // port (+x).
       const dischargeSide = bowThruster > 0 ? 1 : -1;
@@ -183,42 +170,11 @@ export function WashEffects({
       bowMesh.scale.set(reach, 1.8 + magnitude * 0.7, 1);
       bowMesh.visible = magnitude > 0.02;
     }
-
-    const updateTurboWake = (
-      group: Group | null,
-      material: ShaderMaterial | null,
-      side: -1 | 1,
-    ) => {
-      if (!group || !material) {
-        return;
-      }
-
-      const wakeLength = boat.lengthM * 4.6;
-      const strength = turboActive ? 1 : 0;
-      material.uniforms.uStrength.value +=
-        (strength - material.uniforms.uStrength.value) * (1 - Math.exp(-Math.min(delta, 0.1) * 7));
-      material.uniforms.uTime.value = time * 1.8;
-      group.visible = material.uniforms.uStrength.value > 0.01;
-      group.position.set(
-        side * boat.beamM * 0.52,
-        WATER_LOCAL_Y + 0.015,
-        boat.lengthM * 0.38 - wakeLength * 0.5,
-      );
-      group.rotation.y = side * 0.075;
-      group.scale.set(boat.beamM * 0.72, 1, wakeLength);
-    };
-
-    updateTurboWake(portTurboGroupRef.current, portTurboMaterialRef.current, 1);
-    updateTurboWake(
-      starboardTurboGroupRef.current,
-      starboardTurboMaterialRef.current,
-      -1,
-    );
   });
 
   return (
     <group>
-      <group ref={portGroupRef}>
+      <group ref={portGroupRef} name="port-propeller-wash">
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[1, 1]} />
           <shaderMaterial
@@ -231,7 +187,7 @@ export function WashEffects({
           />
         </mesh>
       </group>
-      <group ref={starboardGroupRef}>
+      <group ref={starboardGroupRef} name="starboard-propeller-wash">
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[1, 1]} />
           <shaderMaterial
@@ -255,35 +211,6 @@ export function WashEffects({
           depthWrite={false}
         />
       </mesh>
-      {[
-        {
-          key: "port-turbo",
-          groupRef: portTurboGroupRef,
-          materialRef: portTurboMaterialRef,
-          uniforms: portTurboUniforms,
-        },
-        {
-          key: "starboard-turbo",
-          groupRef: starboardTurboGroupRef,
-          materialRef: starboardTurboMaterialRef,
-          uniforms: starboardTurboUniforms,
-        },
-      ].map(({ key, groupRef, materialRef, uniforms }) => (
-        <group key={key} ref={groupRef}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[1, 1]} />
-            <shaderMaterial
-              ref={materialRef}
-              uniforms={uniforms}
-              vertexShader={washVertexShader}
-              fragmentShader={washFragmentShader}
-              transparent
-              depthWrite={false}
-              depthTest={false}
-            />
-          </mesh>
-        </group>
-      ))}
     </group>
   );
 }

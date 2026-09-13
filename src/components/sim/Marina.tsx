@@ -27,6 +27,10 @@ import type {
   Vec2,
 } from "@/lib/marinas/types";
 
+import { dockDamageSections, dockStructuralCells, type DockSection } from "@/lib/sim/dock-damage";
+import { rocheClearings } from "@/lib/marinas/roche-landmarks";
+import { RocheHarborScenery } from "./RocheHarborScenery";
+import { InstancedDockFingers } from "./InstancedDockFingers";
 import { ChartTerrain } from "./ChartTerrain";
 
 const CONTACT_FRICTION = 0.01;
@@ -41,6 +45,7 @@ type MarinaProps = {
   layout: MarinaLayout;
   selectedBerthId: string | null;
   docked: boolean;
+  destroyed: ReadonlySet<string>;
 };
 
 function degToRad(value: number) {
@@ -97,12 +102,13 @@ function cleatPositionsForDock(dock: DockFloat) {
   return positions;
 }
 
-function InstancedPilings({ runs }: { runs: PilingRun[] }) {
+function InstancedPilings({ runs, broken }: { runs: PilingRun[]; broken: Set<string> }) {
   const meshRef = useRef<InstancedMesh | null>(null);
   const positions = useMemo(
     () =>
       runs.flatMap((run) =>
-        pilingPositions(run).map((position) => ({
+        pilingPositions(run).map((position, index) => ({
+          id: `piling:${run.id}-${index}`,
           position,
           radius: run.radiusM ?? 0.2,
         })),
@@ -123,13 +129,14 @@ function InstancedPilings({ runs }: { runs: PilingRun[] }) {
     const translation = new Vector3();
 
     positions.forEach((piling, index) => {
-      translation.set(piling.position[0], PILING_HEIGHT * 0.5 - 0.7, piling.position[1]);
-      scale.set(piling.radius / 0.2, 1, piling.radius / 0.2);
+      const snapped = broken.has(piling.id);
+      translation.set(piling.position[0], snapped ? -0.35 : PILING_HEIGHT * 0.5 - 0.7, piling.position[1]);
+      scale.set(piling.radius / 0.2, snapped ? 0.23 : 1, piling.radius / 0.2);
       matrix.compose(translation, quaternion, scale);
       mesh.setMatrixAt(index, matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
-  }, [positions]);
+  }, [positions, broken]);
 
   if (positions.length === 0) {
     return null;
@@ -246,11 +253,25 @@ function InstancedTrees({ clusters }: { clusters: TreeCluster[] }) {
   );
 }
 
-function DockVisual({ dock }: { dock: DockFloat }) {
+function DockVisual({ dock, sections }: { dock: DockFloat; sections?: DockSection[] }) {
   const [width, length] = dock.size;
   const deckColor = dock.color ?? (dock.kind === "pier" ? "#8a7a63" : "#a89680");
   const deckHeight = dock.kind === "breakwater" ? 0.85 : 0.48;
   const deckY = DOCK_DECK_TOP_Y - deckHeight * 0.5;
+
+  if (sections && (sections.length !== 1 || sections[0].width !== width || sections[0].length !== length)) {
+    return <group position={[dock.position[0], 0, dock.position[1]]} rotation={[0, degToRad(dock.rotationDeg ?? 0), 0]}>
+      {sections.map((part, i) => <group key={i} position={[part.x, 0, part.z]}>
+        <mesh castShadow receiveShadow position={[0, deckY, 0]}><boxGeometry args={[part.width, deckHeight, part.length]} /><meshStandardMaterial color={deckColor} roughness={0.95} /></mesh>
+        <mesh position={[0, 0.02, 0]}><boxGeometry args={[part.width * 0.94, 0.2, part.length * 0.985]} /><meshStandardMaterial color="#3c342c" roughness={1} /></mesh>
+        {[-1, 1].map((side) => Math.abs(part.x + side * part.width / 2) > width / 2 - 0.1 ? <mesh key={side} position={[side * (part.width / 2 - 0.07), 0.655, 0]}><boxGeometry args={[0.11, 0.15, part.length]} /><meshStandardMaterial color="#6f5b44" roughness={0.9} /></mesh> : null)}
+        {/* Short jagged planks hang from the newly exposed ends. */}
+        {[-1, 1].map((end) => Math.abs(part.z + end * part.length / 2) < length / 2 - 0.05 ? <group key={end} position={[0, 0.4, end * part.length / 2]}>
+          {[0, 1, 2].map((n) => <mesh key={n} position={[(n - 1) * part.width * 0.3, -n * 0.04, 0]} rotation={[end * (0.2 + n * 0.18), 0, 0]}><boxGeometry args={[Math.min(0.18, part.width / 4), 0.09, 0.45 + n * 0.13]} /><meshStandardMaterial color="#c39b6a" roughness={1} /></mesh>)}
+        </group> : null)}
+      </group>)}
+    </group>;
+  }
 
   return (
     <group
@@ -345,34 +366,39 @@ function BerthMarker({
 }
 
 // Telemetry changes ten times a second; the harbour and its colliders do not.
-export const Marina = memo(function Marina({ layout, selectedBerthId, docked }: MarinaProps) {
+export const Marina = memo(function Marina({ layout, selectedBerthId, docked, destroyed }: MarinaProps) {
   const chart = useMemo(() => getWorldChart(layout.chartId ?? layout.id), [layout]);
 
   const docks = useMemo(() => sceneDocks(layout), [layout]);
+  const cells = useMemo(() => new Map(docks.map((dock) => [dock.id, dockStructuralCells(dock)])), [docks]);
+  const sections = useMemo(() => new Map(docks.map((dock) => [dock.id, dockDamageSections(dock, destroyed)])), [docks, destroyed]);
+  const brokenPilings = useMemo(() => new Set([...destroyed].filter((key) => key.startsWith("piling:"))), [destroyed]);
+  const damagedDockIds = useMemo(() => new Set(docks.filter((dock) => cells.get(dock.id)!.some((cell) => destroyed.has(cell.key))).map((dock) => dock.id)), [docks, cells, destroyed]);
+  const isRoche = layout.id === "roche-harbor-marina";
+  const clearings = useMemo(() => isRoche && chart ? rocheClearings(chart) : undefined, [isRoche, chart]);
+  const fingers = useMemo(() => isRoche ? docks.filter((d) => d.id.includes("-finger-") && !damagedDockIds.has(d.id)) : [], [isRoche, docks, damagedDockIds]);
+  const mainDocks = useMemo(() => isRoche ? docks.filter((d) => !d.id.includes("-finger-") || damagedDockIds.has(d.id)) : docks, [isRoche, docks, damagedDockIds]);
 
   return (
     <group>
-      {chart ? <ChartTerrain chart={chart} /> : null}
+      {chart ? <ChartTerrain chart={chart} surveyedRelief={isRoche} clearings={clearings} /> : null}
+
+      {isRoche && chart ? <RocheHarborScenery chart={chart} /> : null}
 
       {/* one static body carries every collider in the marina */}
       <RigidBody type="fixed" colliders={false}>
-        {docks.map((dock) => (
-          <CuboidCollider
-            key={`collider-${dock.id}`}
+        {docks.map((dock) => <group key={dock.id} position={[dock.position[0], 0, dock.position[1]]} rotation={[0, degToRad(dock.rotationDeg ?? 0), 0]}>
+          {cells.get(dock.id)!.filter((part) => !destroyed.has(part.key)).map((part) => <group key={part.key} userData={{ fracture: part.fracture }}><CuboidCollider
             name={`dock:${dock.id}`}
-            args={[dock.size[0] * 0.5, DOCK_COLLIDER_HALF_HEIGHT, dock.size[1] * 0.5]}
-            position={[dock.position[0], DOCK_COLLIDER_HALF_HEIGHT - 0.3, dock.position[1]]}
-            rotation={[0, degToRad(dock.rotationDeg ?? 0), 0]}
-            friction={CONTACT_FRICTION}
-            frictionCombineRule={CoefficientCombineRule.Min}
-            restitution={CONTACT_RESTITUTION}
-            restitutionCombineRule={CoefficientCombineRule.Min}
-          />
-        ))}
+            args={[part.width * 0.5, DOCK_COLLIDER_HALF_HEIGHT, part.length * 0.5]}
+            position={[part.x, DOCK_COLLIDER_HALF_HEIGHT - 0.3, part.z]}
+            friction={CONTACT_FRICTION} frictionCombineRule={CoefficientCombineRule.Min}
+            restitution={CONTACT_RESTITUTION} restitutionCombineRule={CoefficientCombineRule.Min}
+          /></group>)}
+        </group>)}
         {layout.pilings.flatMap((run) =>
-          pilingPositions(run).map((position, index) => (
-            <CylinderCollider
-              key={`piling-${run.id}-${index}`}
+          pilingPositions(run).map((position, index) => brokenPilings.has(`piling:${run.id}-${index}`) ? null : (
+            <group key={`piling-${run.id}-${index}`} userData={{ fracture: { key: `piling:${run.id}-${index}`, objectName: `piling:${run.id}-${index}`, width: (run.radiusM ?? 0.2) * 2, length: PILING_HEIGHT, workJ: 85_000 * ((run.radiusM ?? 0.2) / 0.2) ** 2 } }}><CylinderCollider
               name={`piling:${run.id}-${index}`}
               args={[PILING_HEIGHT * 0.5, run.radiusM ?? 0.2]}
               position={[position[0], PILING_HEIGHT * 0.5 - 0.7, position[1]]}
@@ -380,7 +406,7 @@ export const Marina = memo(function Marina({ layout, selectedBerthId, docked }: 
               frictionCombineRule={CoefficientCombineRule.Min}
               restitution={CONTACT_RESTITUTION}
               restitutionCombineRule={CoefficientCombineRule.Min}
-            />
+            /></group>
           )),
         )}
         {(layout.land ?? []).map((land) => (
@@ -416,12 +442,13 @@ export const Marina = memo(function Marina({ layout, selectedBerthId, docked }: 
         </group>
       ))}
 
-      {docks.map((dock) => (
-        <DockVisual key={`dock-${dock.id}`} dock={dock} />
+      <InstancedDockFingers docks={fingers} />
+      {mainDocks.map((dock) => (
+        <DockVisual key={`dock-${dock.id}`} dock={dock} sections={sections.get(dock.id)} />
       ))}
 
-      <InstancedPilings runs={layout.pilings} />
-      <InstancedCleats docks={docks} />
+      <InstancedPilings runs={layout.pilings} broken={brokenPilings} />
+      <InstancedCleats docks={docks.filter((dock) => !damagedDockIds.has(dock.id))} />
       <InstancedTrees clusters={layout.trees ?? []} />
 
       {(layout.buoys ?? []).map((buoy, index) => (

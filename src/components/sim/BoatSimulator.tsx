@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { Sky } from "@react-three/drei";
 import { Physics, type RapierRigidBody } from "@react-three/rapier";
-import type { Object3D } from "three";
+import { PCFShadowMap, type Object3D } from "three";
 import type { WheelEventHandler } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,6 +13,9 @@ import { draftFeet as draftFeetFor } from "@/lib/boats/stats";
 import { useGamepad } from "@/hooks/useGamepad";
 import { useEngineAudio } from "@/hooks/useEngineAudio";
 import { useEngineState } from "@/hooks/useEngineState";
+import { useRocheCeremony } from "@/hooks/useRocheCeremony";
+import { RocheHarborSalute } from "./RocheHarborSalute";
+import { RocheCeremonyNotice } from "./RocheCeremonyNotice";
 import { useVhfRadio } from "@/hooks/useVhfRadio";
 import { chartToGeo, getWorldChart } from "@/lib/charts";
 import { getMarinaLayout } from "@/lib/marinas";
@@ -33,16 +36,20 @@ import {
 } from "@/lib/sim/collision-damage";
 import { depthGroundsBoat, estimateDepthMeters } from "@/lib/sim/bathymetry";
 import { useViewportCamera } from "@/hooks/useViewportCamera";
+import { DEFAULT_STOP_ID, saveSessionSelection } from "@/lib/sim/session-preferences";
 
 import { Boat } from "./Boat";
 import { DamageOverlay } from "./DamageOverlay";
 import { DockingCelebration } from "./DockingCelebration";
 import { DockingOverlay } from "./DockingOverlay";
-import { ImpactMarks } from "./ImpactMarks";
+import { CollisionEffects } from "./CollisionEffects";
+import { useCollisionAudio } from "@/hooks/useCollisionAudio";
+import { applyVesselImpact, createVesselDamage, damagedEngineState } from "@/lib/sim/vessel-damage";
+import { estimateDamageCost, recordPropertyDamage, recordTargetVesselDamage, type PropertyDamageLedger, type TargetDamageSample } from "@/lib/sim/damage-cost";
 import { Marina } from "./Marina";
 import { MarinaTraffic, type TrafficTarget } from "./MarinaTraffic";
 import { HazardSpawners } from "./HazardSpawners";
-import { GroundingOverlay } from "./GroundingOverlay";
+import { ExerciseOutcomeOverlay } from "./ExerciseOutcomeOverlay";
 import type { Hazard } from "./HazardSpawners";
 import { MooredBoats } from "./MooredBoats";
 import { SimCameraRig } from "./SimCameraRig";
@@ -54,6 +61,7 @@ import { TenderCraft } from "./TenderCraft";
 
 type BoatSimulatorProps = {
   initialBoatSlug?: string;
+  initialStopId?: string;
 };
 
 function computeLocalCurrent(
@@ -117,22 +125,24 @@ function defaultSpawnFor(marina: MarinaLayout) {
   // Docking practice is the point: prefer an arrival exercise when the
   // marina offers one.
   return (
+    marina.spawns.find((spawn) => spawn.id === marina.defaultSpawnId) ??
     marina.spawns.find((spawn) => spawn.kind === "arrival") ?? marina.spawns[0]
   );
 }
 
-export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
+export function BoatSimulator({ initialBoatSlug, initialStopId = DEFAULT_STOP_ID }: BoatSimulatorProps) {
   const router = useRouter();
   const scenario = useMemo(() => SAN_JUAN_AUG_2026_SCENARIO, []);
-  const [activeLegIndex, setActiveLegIndex] = useState(0);
-  const [currentStopId, setCurrentStopId] = useState(scenario.stops[0].id);
+  const initialStop = scenario.stops.find((stop) => stop.id === initialStopId)
+    ?? scenario.stops.find((stop) => stop.id === DEFAULT_STOP_ID)!;
+  const [activeLegIndex, setActiveLegIndex] = useState(() => Math.max(0, scenario.legs.findIndex((leg) => leg.fromStopId === initialStop.id)));
+  const [currentStopId, setCurrentStopId] = useState(initialStop.id);
   const [telemetry, setTelemetry] = useState(DEFAULT_DOCKING_TELEMETRY);
   const [viewMode, setViewMode] = useState<"plan" | "forward" | "backward">("plan");
-  const [planZoom, setPlanZoom] = useState(48);
+  const [planZoom, setPlanZoom] = useState(() => Math.max(26, Math.min(48, getBoatProfile(initialBoatSlug).lengthM * 3.03)));
   const [selectedBoatSlug, setSelectedBoatSlug] = useState(initialBoatSlug ?? DEFAULT_BOAT_SLUG);
   const [conditionsMode, setConditionsMode] = useState<"typical" | "calm">("typical");
   const [hudVisible, setHudVisible] = useState(true);
-  const [turboActive, setTurboActive] = useState(false);
   const [turboAnnouncement, setTurboAnnouncement] = useState({
     id: 0,
     visible: false,
@@ -208,10 +218,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   });
 
   const currentStop = useMemo(
-    () => scenario.stops.find((stop) => stop.id === currentStopId) ?? scenario.stops[0],
-    [currentStopId, scenario.stops],
+    () => scenario.stops.find((stop) => stop.id === currentStopId) ?? initialStop,
+    [currentStopId, scenario.stops, initialStop],
   );
   const marina = useMemo(() => getMarinaLayout(currentStop.sceneId), [currentStop.sceneId]);
+  const isRocheHarbor = marina.id === "roche-harbor-marina";
   const initialSpawn = defaultSpawnFor(marina);
   const [selectedSpawnId, setSelectedSpawnId] = useState(initialSpawn.id);
   const [selectedBerthId, setSelectedBerthId] = useState(initialSpawn.berthId);
@@ -227,7 +238,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   );
 
   const [mapBoatCoordinate, setMapBoatCoordinate] = useState(
-    scenario.stops[0]?.coordinate ?? null,
+    initialStop.coordinate,
   );
   const [breadcrumb, setBreadcrumb] = useState<Array<{ lat: number; lon: number }>>([]);
   const [breadcrumbWorld, setBreadcrumbWorld] = useState<Array<{ x: number; z: number }>>([]);
@@ -308,7 +319,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   const boatBodyRef = useRef<RapierRigidBody | null>(null);
   const resetIdRef = useRef(0);
   const mapAnchorRef = useRef({
-    coordinate: scenario.stops[0].coordinate,
+    coordinate: initialStop.coordinate,
     worldPosition: {
       x: initialSpawn.position[0],
       z: initialSpawn.position[1],
@@ -321,6 +332,9 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     () => getBoatProfile(selectedBoatSlug),
     [selectedBoatSlug],
   );
+  useEffect(() => {
+    saveSessionSelection({ boatSlug: selectedBoat.profileSlug, stopId: currentStop.id });
+  }, [selectedBoat.profileSlug, currentStop.id]);
   const selectedBoatDraftFeet = useMemo(() => draftFeetFor(selectedBoat), [selectedBoat]);
   const throttleAxes = useMemo(
     () => (leversSwapped ? { port: 1, starboard: 0 } : { port: 0, starboard: 1 }),
@@ -361,88 +375,33 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     window.localStorage.removeItem("boat-sim:quadrant-idle");
   };
 
-  const engineState = useEngineState(controls, softwareEngineControls);
-  const engineAudio = useEngineAudio(engineState);
+  const damageRef = useRef(createVesselDamage());
+  const [damage, setDamage] = useState(createVesselDamage);
+  const rawEngineState = useEngineState(controls, softwareEngineControls, selectedBoat.engine, {
+    disabled: grounding !== null || damage.floodingPct >= 1 || plotterExpanded,
+    resetKey: `${selectedBoat.profileSlug}:${resetRequest?.id ?? 0}`,
+    leversSwapped,
+  });
+  const engineState = useMemo(() => damagedEngineState(rawEngineState, damage), [rawEngineState, damage]);
+  const engineAudio = useEngineAudio(engineState, selectedBoat.engine);
   const vhfRadio = useVhfRadio();
-  const turboEligible =
-    engineState.port.running &&
-    engineState.starboard.running &&
-    engineState.port.demandThrottle >= 0.96 &&
-    engineState.starboard.demandThrottle >= 0.96;
-
+  const turboMask = (engineState.port.turboActive ? 1 : 0) | (engineState.starboard.turboActive ? 2 : 0);
+  const turboActive = turboMask !== 0;
+  const previousTurboMaskRef = useRef(0);
   useEffect(() => {
-    const dismissAnnouncement = () => {
-      if (turboAnnouncementTimerRef.current) {
-        window.clearTimeout(turboAnnouncementTimerRef.current);
-        turboAnnouncementTimerRef.current = null;
-      }
-
-      setTurboAnnouncement((current) =>
-        current.visible ? { ...current, visible: false } : current,
-      );
-    };
-    const handleTurboKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.code !== "KeyT" ||
-        event.repeat ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      ) {
-        return;
-      }
-
-      const target = event.target;
-
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-      ) {
-        return;
-      }
-
-      if (turboActive) {
-        setTurboActive(false);
-        dismissAnnouncement();
-        return;
-      }
-
-      if (!turboEligible) {
-        return;
-      }
-
-      setTurboActive(true);
-      setTurboAnnouncement((current) => ({
-        id: current.id + 1,
-        visible: true,
-      }));
-
-      if (turboAnnouncementTimerRef.current) {
-        window.clearTimeout(turboAnnouncementTimerRef.current);
-      }
-
-      turboAnnouncementTimerRef.current = window.setTimeout(() => {
-        turboAnnouncementTimerRef.current = null;
-        setTurboAnnouncement((current) => ({ ...current, visible: false }));
-      }, 3000);
-    };
-
-    window.addEventListener("keydown", handleTurboKeyDown);
-    return () => window.removeEventListener("keydown", handleTurboKeyDown);
-  }, [turboActive, turboEligible]);
-
-  useEffect(() => {
-    if (turboActive && !turboEligible) {
-      setTurboActive(false);
+    const engaged = turboMask & ~previousTurboMaskRef.current;
+    previousTurboMaskRef.current = turboMask;
+    if (!engaged && turboMask !== 0) return;
+    if (turboAnnouncementTimerRef.current) window.clearTimeout(turboAnnouncementTimerRef.current);
+    turboAnnouncementTimerRef.current = null;
+    setTurboAnnouncement((current) => engaged
+      ? { id: current.id + 1, visible: true }
+      : current.visible ? { ...current, visible: false } : current);
+    if (engaged) turboAnnouncementTimerRef.current = window.setTimeout(() => {
+      turboAnnouncementTimerRef.current = null;
       setTurboAnnouncement((current) => ({ ...current, visible: false }));
-
-      if (turboAnnouncementTimerRef.current) {
-        window.clearTimeout(turboAnnouncementTimerRef.current);
-        turboAnnouncementTimerRef.current = null;
-      }
-    }
-  }, [turboActive, turboEligible]);
+    }, 3000);
+  }, [turboMask]);
 
   useEffect(
     () => () => {
@@ -468,8 +427,15 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   // Collision damage: the physics callback streams raw contacts; the tracker
   // filters them into discrete incidents that cost hull integrity.
   const impactTrackerRef = useRef(new ImpactTracker());
-  const [hullIntegrityPct, setHullIntegrityPct] = useState(100);
   const [incidents, setIncidents] = useState<ImpactIncident[]>([]);
+  const [propertyDamage, setPropertyDamage] = useState<PropertyDamageLedger>(() => new Map());
+  // The HUD and outcome report share one estimate, including ongoing damage
+  // to the marina after the initial collision.
+  const damageCost = useMemo(() => estimateDamageCost(damage, selectedBoat.economics.replacementValueUsd, propertyDamage),
+    [damage, selectedBoat.economics.replacementValueUsd, propertyDamage]);
+  const exerciseEnded = damageCost.totalLoss || grounding !== null;
+  const [destroyedMembers, setDestroyedMembers] = useState<ReadonlySet<string>>(() => new Set());
+  const [vesselIncidents, setVesselIncidents] = useState<ImpactIncident[]>([]);
   const boatLengthRef = useRef(selectedBoat.lengthM);
 
   useEffect(() => {
@@ -477,23 +443,41 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   }, [selectedBoat.lengthM]);
 
   const handleImpact = useCallback((raw: RawImpact) => {
+    if (raw.fracture) setDestroyedMembers((current) => new Set(current).add(raw.fracture!.key));
     const incident = impactTrackerRef.current.register(raw, boatLengthRef.current);
 
     if (!incident) {
       return;
     }
 
-    setHullIntegrityPct((current) => Math.max(0, current - incident.hullDamagePct));
+    damageRef.current = applyVesselImpact(damageRef.current, incident, boatLengthRef.current);
+    setDamage(damageRef.current);
+    setPropertyDamage((current) => recordPropertyDamage(current, incident));
     setIncidents((current) => [...current.slice(-39), incident]);
+    if (incident.surface === "moored" || incident.surface === "traffic") {
+      setVesselIncidents((current) => [...current.filter((hit) => hit.objectName !== incident.objectName),
+        ...current.filter((hit) => hit.objectName === incident.objectName).slice(-11), incident]);
+    }
   }, []);
+
+  const handleTargetDamage = useCallback<TargetDamageSample>((objectName, condition, lastIncidentId) => {
+    setPropertyDamage((current) => recordTargetVesselDamage(current, objectName, condition, lastIncidentId));
+  }, []);
+
+  useCollisionAudio({ incidents, damage, paused: plotterExpanded, audioEnabled: engineAudio.audioEnabled, getAudioContext: engineAudio.getAudioContext });
 
   // Docking celebration: armed only after the boat has genuinely been away
   // from the berth, so spawning already-docked never fires it.
   const [celebration, setCelebration] = useState({ id: 0, active: false });
+  const rocheCeremony = useRocheCeremony({
+    enabled: isRocheHarbor, active: celebration.active && !exerciseEnded && selectedSpawn.kind === "arrival",
+    celebrationId: celebration.id, audioEnabled: engineAudio.audioEnabled,
+    getAudioContext: engineAudio.getAudioContext,
+  });
   const celebrationArmedRef = useRef(false);
   const dockTimerRef = useRef<number | null>(null);
   const awayTimerRef = useRef<number | null>(null);
-  const dockedNow = Boolean(guidance?.docked);
+  const dockedNow = !exerciseEnded && Boolean(guidance?.docked) && damage.floodingPct < 20 && damage.fire === 0;
 
   useEffect(() => {
     if (dockedNow) {
@@ -527,11 +511,17 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         );
       }, 3000);
     }
-  }, [dockedNow]);
+  }, [dockedNow, selectedSpawn.id, selectedBerth?.id, resetRequest?.id]);
+
+  useEffect(() => () => {
+    if (dockTimerRef.current) window.clearTimeout(dockTimerRef.current);
+    if (awayTimerRef.current) window.clearTimeout(awayTimerRef.current);
+    dockTimerRef.current = null;
+    awayTimerRef.current = null;
+  }, []);
 
   const resetBoatTo = useCallback(
     (spawn: SpawnPoint, anchorCoordinate: { lat: number; lon: number }) => {
-      setTurboActive(false);
       setTurboAnnouncement((current) => ({ ...current, visible: false }));
 
       if (turboAnnouncementTimerRef.current) {
@@ -546,8 +536,12 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
 
       // A fresh exercise means a repaired boat and a repaired marina.
       impactTrackerRef.current.reset();
-      setHullIntegrityPct(100);
+      damageRef.current = createVesselDamage();
+      setDamage(damageRef.current);
       setIncidents([]);
+      setPropertyDamage(new Map());
+      setDestroyedMembers(new Set());
+      setVesselIncidents([]);
       groundingRef.current = null;
       setGrounding(null);
 
@@ -593,6 +587,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
   };
   const handleBoatChange = (slug: string) => {
     setSelectedBoatSlug(slug);
+    setPlanZoom(Math.max(26, Math.min(48, getBoatProfile(slug).lengthM * 3.03)));
     router.replace(`/?boat=${slug}`);
   };
   const handleViewModeChange = (mode: "plan" | "forward" | "backward") => {
@@ -700,7 +695,6 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
       };
       groundingRef.current = nextGrounding;
       setGrounding(nextGrounding);
-      setTurboActive(false);
       setTenderActive(false);
     }
     // Dynamic local current (tide rips etc): mutate environment's currentVelocity
@@ -863,7 +857,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
     <main className="relative h-dvh min-h-dvh overflow-hidden bg-[#07131c] text-white">
       <Canvas
         className="!absolute !inset-0 !h-full !w-full"
-        shadows
+        shadows={{ type: PCFShadowMap }}
         // near=1.5 (vs the 0.1 default) is what keeps coplanar detail — deck
         // caps, rub rails, dock skirts — from z-fighting at plan-view
         // distances; nothing renderable ever gets within 1.5 m of the camera.
@@ -872,11 +866,11 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         gl={{ antialias: true }}
       >
         <color attach="background" args={["#a9c2d2"]} />
-        <fog attach="fog" args={["#a9c2d2", 150, 760]} />
+        <fog attach="fog" args={isRocheHarbor ? ["#b4c9cc", 450, 2800] : ["#a9c2d2", 150, 760]} />
         <Sky
           distance={4000}
-          sunPosition={[240, 180, 130]}
-          turbidity={5.5}
+          sunPosition={isRocheHarbor ? [600, 180, 230] : [240, 180, 130]}
+          turbidity={isRocheHarbor ? 3.8 : 5.5}
           rayleigh={1.6}
           mieCoefficient={0.004}
           mieDirectionalG={0.8}
@@ -908,10 +902,12 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
           target={selectedBerth?.center ?? null}
         />
         <DockingCelebration
-          active={celebration.active}
+          active={celebration.active && !exerciseEnded}
           celebrationId={celebration.id}
           berth={selectedBerth}
+          quiet={isRocheHarbor}
         />
+        {isRocheHarbor ? <RocheHarborSalute elapsedRef={rocheCeremony.elapsedRef} tapsDuration={rocheCeremony.tapsDuration} active={rocheCeremony.visible} /> : null}
         <SimCameraRig
           boatLengthM={selectedBoat.lengthM}
           bodyRef={boatBodyRef}
@@ -924,6 +920,7 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         />
 
         <Physics
+          paused={plotterExpanded}
           gravity={[0, 0, 0]}
           colliders={false}
           contactNaturalFrequency={12}
@@ -933,21 +930,26 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
           <Marina
             layout={marina}
             selectedBerthId={selectedBerth?.id ?? null}
-            docked={guidance?.docked ?? false}
+            docked={dockedNow}
+            destroyed={destroyedMembers}
           />
           <HazardSpawners
             activeSpawn={selectedSpawn}
             layout={marina}
+            environment={environment}
             onUpdate={setHazards}
           />
           <Wildlife regionKey={marina.id} />
-          <MooredBoats layout={marina} />
+          <MooredBoats key={`moored:${marina.id}:${resetRequest?.id}`} layout={marina} incidents={vesselIncidents} onDamageSample={handleTargetDamage} />
           <MarinaTraffic
+            key={`traffic:${marina.id}:${resetRequest?.id}`}
+            incidents={vesselIncidents}
             layout={marina}
             onTraffic={setTrafficTargets}
+            onDamageSample={handleTargetDamage}
             playerBodyRef={boatBodyRef}
           />
-          <ImpactMarks incidents={incidents} />
+          <CollisionEffects key={resetRequest?.id} incidents={incidents} environment={environment} />
           {tenderActive && anchor.point ? (
             <TenderCraft
               origin={anchor.point}
@@ -977,6 +979,8 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
                 : null
             }
             hullDamageMarks={incidents}
+            damageRef={damageRef}
+            onDamageSample={setDamage}
             initialPose={spawnToPose(initialSpawn)}
             onImpact={handleImpact}
             onPositionSample={handleBoatPositionSample}
@@ -987,22 +991,19 @@ export function BoatSimulator({ initialBoatSlug }: BoatSimulatorProps) {
         </Physics>
       </Canvas>
 
+      <RocheCeremonyNotice boat={selectedBoat} ceremony={rocheCeremony} audioEnabled={engineAudio.audioEnabled} onEnableAudio={() => engineAudio.enableAudio(true)} />
+
       {turboAnnouncement.visible ? (
-        <TurboModeOverlay key={turboAnnouncement.id} />
+        <TurboModeOverlay key={turboAnnouncement.id} engines={turboMask === 3 ? "Both engines" : turboMask === 1 ? "Port engine" : "Starboard engine"} />
       ) : null}
 
-      <DamageOverlay hullIntegrityPct={hullIntegrityPct} incidents={incidents} selectedBoat={selectedBoat} />
+      <DamageOverlay damage={damage} incidents={incidents} cost={damageCost} onRestart={handleRestartBoat} />
 
-      {grounding ? (
-        <GroundingOverlay
-          boat={selectedBoat}
-          depthFeet={grounding.depthFeet}
-          draftFeet={grounding.draftFeet}
-          onRestart={handleRestartBoat}
-        />
-      ) : null}
+      <ExerciseOutcomeOverlay boat={selectedBoat} damage={damage} cost={damageCost}
+        grounding={grounding} onRestart={handleRestartBoat} />
 
       <DockingOverlay
+        suppressEngineStart={exerciseEnded || damage.breach > 0 || damage.portDamage > 0 || damage.starboardDamage > 0}
         audioEnabled={engineAudio.audioEnabled}
         audioSupported={engineAudio.audioSupported}
         controls={controls}
