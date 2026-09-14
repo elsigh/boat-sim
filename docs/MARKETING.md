@@ -92,6 +92,15 @@ python3 scripts/marketing/finalize.py
 
 Watch both exports all the way through, with sound, before sharing a new edit. Check the portrait title margins, every cut, the final URL, and any handling claim against the recorded scene.
 
+## Fleet portraits
+
+The fleet cards use static WebP portraits in `public/media/boats/`, rendered from
+the simulator's actual `BoatVisual` models. To regenerate all seven after a
+model change, run `node scripts/marketing/capture-boat-portraits.mjs` with d3k
+ready. The script temporarily installs a studio route, frames each complete hull
+at the same three-quarter angle, saves 1200 × 750 images, and removes the route
+when finished. The fleet page serves images without running a 3D canvas.
+
 ## Ready-to-use post copy
 
 **Short:** The last 50 feet are the best part. I built a boat simulator for practicing twin-screw approaches in the San Juans. Seven boat profiles, independent levers, and unlimited “let me try that again.” Take the helm: https://my-boats.vercel.app
