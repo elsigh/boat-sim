@@ -6,9 +6,9 @@ Independent throttles. A crosswind in the fairway. Twenty-nine tons that don’t
 
 **A boat simulator for people who love the part where you bring her in.** Practice twin-screw handling in the San Juan Islands, get to know a different boat, and have another go at that approach. Free to play in your browser.
 
-[**Take the helm →**](https://boat-sim.vercel.app) · [The experience](https://boat-sim.vercel.app/about) · [Meet the fleet](https://boat-sim.vercel.app/boats) · [Come aboard as a contributor](CONTRIBUTING.md)
+[**Take the helm →**](https://boat-sim-lake.vercel.app) · [The experience](https://boat-sim-lake.vercel.app/about) · [Meet the fleet](https://boat-sim-lake.vercel.app/boats) · [Come aboard as a contributor](CONTRIBUTING.md)
 
-[![Forward view of Bonum Vitae inside Roche Harbor — launch boat-sim](public/media/hero.jpg)](https://boat-sim.vercel.app)
+[![Forward view of Bonum Vitae inside Roche Harbor — launch boat-sim](public/media/hero.jpg)](https://boat-sim-lake.vercel.app)
 
 ## A little helm time. A lot to play with.
 
@@ -16,7 +16,7 @@ Click either moving preview to watch the film with sound. Both films use real si
 
 | The full tour · 40 seconds | The quick dip · 15 seconds |
 | :--- | :--- |
-| [![Animated preview: boats, close quarters, and the San Juan Islands. Watch the 40-second film.](public/media/feature-preview.gif)](https://boat-sim.vercel.app/about#feature-film) | [![Animated preview of the vertical highlight film. Watch the 15-second short.](public/media/short-preview.gif)](https://boat-sim.vercel.app/about#short-film) |
+| [![Animated preview: boats, close quarters, and the San Juan Islands. Watch the 40-second film.](public/media/feature-preview.gif)](https://boat-sim-lake.vercel.app/about#feature-film) | [![Animated preview of the vertical highlight film. Watch the 15-second short.](public/media/short-preview.gif)](https://boat-sim-lake.vercel.app/about#short-film) |
 | Landscape · [Download MP4](public/media/boat-sim-feature-40s.mp4) | Vertical, ready for Reels / TikTok / Shorts · [Download MP4](public/media/boat-sim-short-15s.mp4) |
 
 Captions are built into the films so they work on mute. The [release media notes](docs/MARKETING.md) include the shot list, soundtrack details, and instructions for making the next cut.
@@ -36,7 +36,7 @@ This is an evolving, simplified maneuvering model, with some experimental drivet
 
 ## Your first five minutes
 
-1. [Open the simulator](https://boat-sim.vercel.app) on a desktop browser. No account or installation needed to play.
+1. [Open the simulator](https://boat-sim-lake.vercel.app) on a desktop browser. No account or installation needed to play.
 2. Choose **Calm**, keep both levers in neutral, and press **Start engines**.
 3. Select **FWD** for the view from behind the boat. Drag the scene to look around.
 4. Try a little thrust, let the boat respond, then bring the levers back to neutral. Neutral removes drive; it doesn’t remove momentum.
@@ -60,15 +60,15 @@ Hold a throttle key to move its lever; release the key to keep the setting. Bow 
 
 | Boat | A good reason to take her out |
 | :--- | :--- |
-| [Bonum Vitae · Grand Banks 52](https://boat-sim.vercel.app/?boat=52-grand-banks-bonum-vitae) | The boat that started the project: heavy twin-screw docking practice |
-| [Serendipity · Nordhavn 86](https://boat-sim.vercel.app/?boat=86-nordhavn-serendipity) | A big displacement boat and a steel-and-white-light helm |
-| [Penalty Box III · Nordhavn 55](https://boat-sim.vercel.app/?boat=55-nordhavn-penalty-box-iii) | A smaller Nordhavn with its own response and profile |
-| [Cranchi E26 Rider](https://boat-sim.vercel.app/?boat=2026-cranchi-e26-rider) | A compact open bow, outboard styling, and a very different scale |
-| [Cranchi Settantotto 78](https://boat-sim.vercel.app/?boat=2026-cranchi-settantotto-78) | A modern flybridge yacht with plenty of boat to manage |
-| [Chris-Craft Corsair 36](https://boat-sim.vercel.app/?boat=2005-chris-craft-corsair-36) | Low foredeck, open cockpit, mahogany, and analog needles |
-| [Crescent 114](https://boat-sim.vercel.app/?boat=1997-crescent-custom-114) | More than a hundred feet to think about before the next turn |
+| [Bonum Vitae · Grand Banks 52](https://boat-sim-lake.vercel.app/?boat=52-grand-banks-bonum-vitae) | The boat that started the project: heavy twin-screw docking practice |
+| [Serendipity · Nordhavn 86](https://boat-sim-lake.vercel.app/?boat=86-nordhavn-serendipity) | A big displacement boat and a steel-and-white-light helm |
+| [Penalty Box III · Nordhavn 55](https://boat-sim-lake.vercel.app/?boat=55-nordhavn-penalty-box-iii) | A smaller Nordhavn with its own response and profile |
+| [Cranchi E26 Rider](https://boat-sim-lake.vercel.app/?boat=2026-cranchi-e26-rider) | A compact open bow, outboard styling, and a very different scale |
+| [Cranchi Settantotto 78](https://boat-sim-lake.vercel.app/?boat=2026-cranchi-settantotto-78) | A modern flybridge yacht with plenty of boat to manage |
+| [Chris-Craft Corsair 36](https://boat-sim-lake.vercel.app/?boat=2005-chris-craft-corsair-36) | Low foredeck, open cockpit, mahogany, and analog needles |
+| [Crescent 114](https://boat-sim-lake.vercel.app/?boat=1997-crescent-custom-114) | More than a hundred feet to think about before the next turn |
 
-Each [vessel profile](https://boat-sim.vercel.app/boats) documents its specs and modeling limitations. The E26, Nordhavn 55, and triple-IPS Cranchi retain twin-lever approximations.
+Each [vessel profile](https://boat-sim-lake.vercel.app/boats) documents its specs and modeling limitations. The E26, Nordhavn 55, and triple-IPS Cranchi retain twin-lever approximations.
 
 ## Built by a boater. Better with a crew.
 

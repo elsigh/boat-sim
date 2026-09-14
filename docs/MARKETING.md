@@ -2,6 +2,8 @@
 
 The public release kit uses actual footage from the simulator. The forward camera is the primary view throughout both films. The chart insert is a screenshot of the real plotter with a slow editorial zoom. The twin-screw segment includes a still detail from the actual helm with port ahead and starboard astern. Gameplay is edited at roughly 1.25–1.5× speed for pacing. All titles are burned in so the story works without sound.
 
+The production site is https://boat-sim-lake.vercel.app, the verified domain attached to the Vercel project. Confirm the project domain in Vercel before changing links or rendering a new campaign; the shorter name without “-lake” serves a different site.
+
 ## Deliverables
 
 | Asset | Intended use |
@@ -92,6 +94,6 @@ Watch both exports all the way through, with sound, before sharing a new edit. C
 
 ## Ready-to-use post copy
 
-**Short:** The last 50 feet are the best part. I built a boat simulator for practicing twin-screw approaches in the San Juans. Seven boat profiles, independent levers, and unlimited “let me try that again.” Take the helm: https://boat-sim.vercel.app
+**Short:** The last 50 feet are the best part. I built a boat simulator for practicing twin-screw approaches in the San Juans. Seven boat profiles, independent levers, and unlimited “let me try that again.” Take the helm: https://boat-sim-lake.vercel.app
 
-**Long:** This started with a Grand Banks charter and a wish for more practice before bringing family and friends into an unfamiliar slip. Boat-sim now has independent throttles, prop walk, wind and current, a chart plotter, and seven boat profiles. If you know a harbor, handle a boat, or like tinkering with a USB helm, come try it and tell me what needs work. Play at https://boat-sim.vercel.app — code and contributions at https://github.com/elsigh/boat-sim
+**Long:** This started with a Grand Banks charter and a wish for more practice before bringing family and friends into an unfamiliar slip. Boat-sim now has independent throttles, prop walk, wind and current, a chart plotter, and seven boat profiles. If you know a harbor, handle a boat, or like tinkering with a USB helm, come try it and tell me what needs work. Play at https://boat-sim-lake.vercel.app — code and contributions at https://github.com/elsigh/boat-sim

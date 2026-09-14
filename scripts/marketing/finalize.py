@@ -30,7 +30,7 @@ text(d,(64,127),'MADE FOR PEOPLE WHO LOVE BOATS',16,ORANGE,mono=True)
 text(d,(60,181),'Your next berth',72,bold=True)
 text(d,(60,260),'starts here.',72,bold=True)
 d.rectangle((64,386,407,449),fill=ORANGE);text(d,(85,404),'TAKE THE HELM',24,INK,bold=True);d.line((361,428,384,405),fill=INK,width=2);d.line((365,405,384,405,384,424),fill=INK,width=2)
-text(d,(64,530),'boat-sim.vercel.app',24,bold=True)
+text(d,(64,530),'boat-sim-lake.vercel.app',24,bold=True)
 im.convert('RGB').save(OUT/'social-card.jpg',quality=90,optimize=True)
 
 # GitHub reliably displays animated GIF images in READMEs; arbitrary <video> HTML
@@ -50,6 +50,6 @@ def captions(items,dest):
         time+=duration
     dest.write_text('\n'.join(lines))
 
-captions([(s['duration'],s['title'],s['sub']+(' Take the helm at boat-sim.vercel.app.' if s.get('end') else '')) for s in SCENES],OUT/'feature-en.vtt')
-captions([(duration,title,subtitle+(' Take the helm at boat-sim.vercel.app.' if i==9 else '')) for i,duration,title,subtitle in CUTS],OUT/'short-en.vtt')
+captions([(s['duration'],s['title'],s['sub']+(' Take the helm at boat-sim-lake.vercel.app.' if s.get('end') else '')) for s in SCENES],OUT/'feature-en.vtt')
+captions([(duration,title,subtitle+(' Take the helm at boat-sim-lake.vercel.app.' if i==9 else '')) for i,duration,title,subtitle in CUTS],OUT/'short-en.vtt')
 print('Posters, motion previews, social card, and captions complete.',flush=True)

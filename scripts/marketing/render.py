@@ -48,7 +48,7 @@ def overlay(name,title,subtitle,tag,index,vertical=False,end=False):
             text(d,(x,yy),line,86,bold=True);yy+=95
         for j,line in enumerate(subtitle.split('\n')):
             text(d,(x,1440+j*53),line,44)
-        if not end: text(d,(x,1560),'boat-sim.vercel.app',40,bold=True)
+        if not end: text(d,(x,1560),'boat-sim-lake.vercel.app',40,bold=True)
         text(d,(w-190,1566),f'{index:02}',22,ORANGE,mono=True)
     else:
         yy=208
@@ -65,7 +65,7 @@ def overlay(name,title,subtitle,tag,index,vertical=False,end=False):
         ax=x+(610 if vertical else 457); ay=by+29
         d.line((ax-12,ay+27,ax+15,ay),fill=INK,width=3)
         d.line((ax-8,ay,ax+15,ay,ax+15,ay+23),fill=INK,width=3)
-        text(d,(x,by+120),'boat-sim.vercel.app',36 if vertical else 36,bold=True)
+        text(d,(x,by+120),'boat-sim-lake.vercel.app',36 if vertical else 36,bold=True)
     dest=WORK/f'{name}-type.png';im.save(dest)
     return dest
 
