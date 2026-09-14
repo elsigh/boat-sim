@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { BOAT_CATALOG } from "@/lib/boats/catalog";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/boats" },
+};
 
 export default function BoatsPage() {
   return (

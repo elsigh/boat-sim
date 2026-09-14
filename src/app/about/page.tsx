@@ -233,7 +233,7 @@ export default function AboutPage() {
               independent engine handling, the chart plotter, different boats,
               wakes, and a return to the marina. On-screen captions introduce
               each feature, then invite you to play and contribute at
-              boat-sim-lake.vercel.app. The 15-second film takes highlights from the
+              my-boats.vercel.app. The 15-second film takes highlights from the
               same footage. Both use an original instrumental soundtrack, with
               no spoken dialogue.
             </p>

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -11,6 +12,16 @@ type BoatProfilePageProps = {
 
 export function generateStaticParams() {
   return BOAT_CATALOG.map((boat) => ({ slug: boat.profileSlug }));
+}
+
+export async function generateMetadata({ params }: BoatProfilePageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const boat = BOAT_CATALOG.find((entry) => entry.profileSlug === slug);
+  if (!boat) notFound();
+
+  return {
+    alternates: { canonical: `/boats/${boat.profileSlug}` },
+  };
 }
 
 export default async function BoatProfilePage({ params }: BoatProfilePageProps) {

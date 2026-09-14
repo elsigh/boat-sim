@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Geist, Geist_Mono, Share_Tech_Mono } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,7 +29,7 @@ const helmDigital = Share_Tech_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://boat-sim-lake.vercel.app"),
+  metadataBase: new URL(SITE_URL),
   title: "boat-sim — Take the helm in the San Juan Islands",
   description: "Practice twin-screw docking, explore seven boat profiles, and find your next favorite approach. A free browser boat simulator built by a boater, with room for more crew.",
   openGraph: {
