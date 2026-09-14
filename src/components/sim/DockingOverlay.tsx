@@ -512,6 +512,16 @@ function CameraPanel({
           <AudioIcon enabled={audioEnabled} muted={!audioSupported || !audioEnabled} />
         </HelmButton>
         <KeyboardLegend />
+        <Link
+          href="/about"
+          prefetch={false}
+          aria-label="About boat-sim and watch the films"
+          title="About boat-sim"
+          className="inline-flex min-h-6 items-center rounded px-1.5 text-[0.65rem] uppercase tracking-wider underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-label)" }}
+        >
+          About
+        </Link>
         <HelmButton className="hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Hide panels (H)">
           H
         </HelmButton>

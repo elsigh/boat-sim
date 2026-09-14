@@ -28,8 +28,15 @@ const helmDigital = Share_Tech_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "boatsim",
-  description: "A Next.js + React Three Fiber docking simulator with boat profiles and maneuvering practice scenes.",
+  metadataBase: new URL("https://boat-sim.vercel.app"),
+  title: "boat-sim — Take the helm in the San Juan Islands",
+  description: "Practice twin-screw docking, explore seven boat profiles, and find your next favorite approach. A free browser boat simulator built by a boater, with room for more crew.",
+  openGraph: {
+    siteName: "boat-sim",
+    type: "website",
+    images: [{ url: "/media/social-card.jpg", width: 1200, height: 630, alt: "boat-sim — Take the helm in the San Juan Islands" }],
+  },
+  twitter: { card: "summary_large_image", images: ["/media/social-card.jpg"] },
 };
 
 export default function RootLayout({

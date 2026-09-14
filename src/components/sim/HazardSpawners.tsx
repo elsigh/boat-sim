@@ -9,6 +9,7 @@ import type { MarinaLayout, SpawnPoint } from "@/lib/marinas/types";
 import type { SimulationEnvironment } from "@/lib/sim/boat-physics";
 import { placeHazards, type Hazard } from "@/lib/sim/hazard-placement";
 import { CrabPotBuoy } from "./CrabPotBuoy";
+import { KelpClump } from "./KelpClump";
 
 export type { Hazard } from "@/lib/sim/hazard-placement";
 
@@ -112,10 +113,7 @@ export function HazardSpawners({
           {hazard.kind === "crab" ? (
             <CrabPotBuoy x={hazard.x} z={hazard.z} environment={environment} />
           ) : hazard.kind === "kelp" ? (
-            <mesh name="kelp-clump" scale={[1, 0.16, 1]}>
-              <sphereGeometry args={[0.8, 24, 12]} />
-              <meshStandardMaterial color="#527834" roughness={0.95} />
-            </mesh>
+            <KelpClump x={hazard.x} z={hazard.z} environment={environment} />
           ) : (
             <mesh>
               <cylinderGeometry args={[0.11, 0.15, 2.2, 6]} />
