@@ -62,6 +62,7 @@ import { TenderCraft } from "./TenderCraft";
 type BoatSimulatorProps = {
   initialBoatSlug?: string;
   initialStopId?: string;
+  onReady?: () => void;
 };
 
 function computeLocalCurrent(
@@ -130,7 +131,7 @@ function defaultSpawnFor(marina: MarinaLayout) {
   );
 }
 
-export function BoatSimulator({ initialBoatSlug, initialStopId = DEFAULT_STOP_ID }: BoatSimulatorProps) {
+export function BoatSimulator({ initialBoatSlug, initialStopId = DEFAULT_STOP_ID, onReady }: BoatSimulatorProps) {
   const router = useRouter();
   const scenario = useMemo(() => SAN_JUAN_AUG_2026_SCENARIO, []);
   const initialStop = scenario.stops.find((stop) => stop.id === initialStopId)
@@ -909,6 +910,7 @@ export function BoatSimulator({ initialBoatSlug, initialStopId = DEFAULT_STOP_ID
         />
         {isRocheHarbor ? <RocheHarborSalute elapsedRef={rocheCeremony.elapsedRef} tapsDuration={rocheCeremony.tapsDuration} active={rocheCeremony.visible} /> : null}
         <SimCameraRig
+          onReady={onReady}
           boatLengthM={selectedBoat.lengthM}
           bodyRef={boatBodyRef}
           tenderBodyRef={tenderRef as any}

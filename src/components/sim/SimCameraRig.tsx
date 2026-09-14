@@ -8,6 +8,7 @@ import { type Object3D, Quaternion, Vector3 } from "three";
 import { liveRigidBody } from "@/lib/sim/rapier-utils";
 
 type SimCameraRigProps = {
+  onReady?: () => void;
   boatLengthM: number;
   bodyRef: MutableRefObject<RapierRigidBody | null>;
   tenderBodyRef?: MutableRefObject<Object3D | null>;
@@ -27,6 +28,7 @@ const desiredTarget = new Vector3();
 const lookTarget = new Vector3();
 
 export function SimCameraRig({
+  onReady,
   boatLengthM,
   bodyRef,
   tenderBodyRef,
@@ -38,6 +40,13 @@ export function SimCameraRig({
 }: SimCameraRigProps) {
   const { camera } = useThree();
   const initializedRef = useRef(false);
+  const readyNotifiedRef = useRef(false);
+  const readyFrameRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (readyFrameRef.current !== null) cancelAnimationFrame(readyFrameRef.current);
+    readyFrameRef.current = null;
+  }, []);
 
   useEffect(() => {
     camera.up.set(0, 1, 0);
@@ -148,6 +157,16 @@ export function SimCameraRig({
     }
 
     camera.lookAt(lookTarget);
+
+    // useFrame runs before WebGL renders. Reveal on the following browser
+    // frame, after the live boat and its correctly positioned camera are drawn.
+    if (onReady && !readyNotifiedRef.current && readyFrameRef.current === null) {
+      readyFrameRef.current = requestAnimationFrame(() => {
+        readyFrameRef.current = null;
+        readyNotifiedRef.current = true;
+        onReady();
+      });
+    }
   });
 
   return null;

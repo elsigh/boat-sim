@@ -1,0 +1,46 @@
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: #07131c;
+  color: #edf4f4;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 450ms ease-out, visibility 0s linear 450ms;
+}
+
+.screen[data-ready="true"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.label {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.label svg {
+  color: #78b7c4;
+}
+
+.brand {
+  margin: 0;
+  font: 600 28px/1.2 Arial, sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.caption {
+  margin: 0;
+  color: #9aafb9;
+  font: 13px/1.5 Arial, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen {
+    transition: none;
+  }
+}
