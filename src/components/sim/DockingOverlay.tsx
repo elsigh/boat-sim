@@ -342,16 +342,16 @@ export function DockingOverlay(props: DockingOverlayProps) {
 
           {/* Right column: the instruments. */}
           <div className="pointer-events-auto absolute bottom-3 right-4 top-4 hidden w-[clamp(17rem,21vw,20rem)] flex-col gap-2 overflow-y-auto pl-1 lg:flex [&>div]:shrink-0">
-            <div className="flex justify-end">
-              <CameraPanel
-                audioEnabled={audioEnabled}
-                audioSupported={audioSupported}
-                onEnableAudio={onEnableAudio}
-                onToggleHud={onToggleHud}
-                onViewModeChange={onViewModeChange}
-                viewMode={viewMode}
-              />
-            </div>
+            <CameraPanel
+              audioEnabled={audioEnabled}
+              audioSupported={audioSupported}
+              className="w-full min-w-0"
+              onEnableAudio={onEnableAudio}
+              onToggleHud={onToggleHud}
+              onViewModeChange={onViewModeChange}
+              showAbout={false}
+              viewMode={viewMode}
+            />
 
             <RadioPanel radio={vhfRadio} channel={marina.vhfChannel} />
 
@@ -472,24 +472,43 @@ export function DockingOverlay(props: DockingOverlayProps) {
   );
 }
 
+function AboutLink({ className = "" }: { className?: string }) {
+  return (
+    <Link
+      href="/about"
+      prefetch={false}
+      aria-label="About boat-sim and watch the films"
+      title="About boat-sim"
+      className={`inline-flex min-h-6 items-center rounded px-1.5 text-[0.65rem] uppercase tracking-wider underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 ${className}`}
+      style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-label)" }}
+    >
+      About
+    </Link>
+  );
+}
+
 function CameraPanel({
   audioEnabled,
   audioSupported,
+  className = "",
   onEnableAudio,
   onToggleHud,
   onViewModeChange,
+  showAbout = true,
   viewMode,
 }: {
   audioEnabled: boolean;
   audioSupported: boolean;
+  className?: string;
   onEnableAudio: (nextEnabled?: boolean) => void;
   onToggleHud: () => void;
   onViewModeChange: (mode: ViewMode) => void;
+  showAbout?: boolean;
   viewMode: ViewMode;
 }) {
   return (
-    <Panel>
-      <div className="flex items-center gap-1.5 px-2 py-1.5">
+    <Panel className={className}>
+      <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5">
         <HelmSegmented<ViewMode>
           value={viewMode}
           onChange={onViewModeChange}
@@ -512,16 +531,7 @@ function CameraPanel({
           <AudioIcon enabled={audioEnabled} muted={!audioSupported || !audioEnabled} />
         </HelmButton>
         <KeyboardLegend />
-        <Link
-          href="/about"
-          prefetch={false}
-          aria-label="About boat-sim and watch the films"
-          title="About boat-sim"
-          className="inline-flex min-h-6 items-center rounded px-1.5 text-[0.65rem] uppercase tracking-wider underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-label)" }}
-        >
-          About
-        </Link>
+        {showAbout ? <AboutLink /> : null}
         <HelmButton className="hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Hide panels (H)">
           H
         </HelmButton>
@@ -567,9 +577,12 @@ function BoatPlate({
             {selectedBoat.manufacturer} {selectedBoat.model}
           </p>
         </div>
-        <HelmButton size="sm" onClick={onToggle} ariaLabel={expanded ? "Collapse" : "Expand"}>
-          {expanded ? "−" : "+"}
-        </HelmButton>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <AboutLink />
+          <HelmButton size="sm" onClick={onToggle} ariaLabel={expanded ? "Collapse" : "Expand"}>
+            {expanded ? "−" : "+"}
+          </HelmButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 px-3 pb-2.5">
