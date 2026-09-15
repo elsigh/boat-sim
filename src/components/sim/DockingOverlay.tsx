@@ -276,6 +276,7 @@ export function DockingOverlay(props: DockingOverlayProps) {
           onEnableAudio={onEnableAudio}
           onToggleHud={onToggleHud}
           onViewModeChange={onViewModeChange}
+          showAbout={false}
           viewMode={viewMode}
         />
       </div>
@@ -283,9 +284,7 @@ export function DockingOverlay(props: DockingOverlayProps) {
         <div className="absolute inset-0 lg:hidden">
           <MinimalHud
             engineState={engineState}
-            guidance={guidance}
             onToggleHud={onToggleHud}
-            selectedSpawn={selectedSpawn}
             telemetry={telemetry}
           />
         </div>
@@ -300,14 +299,13 @@ export function DockingOverlay(props: DockingOverlayProps) {
               onEnableAudio={onEnableAudio}
               onToggleHud={onToggleHud}
               onViewModeChange={onViewModeChange}
+              showAbout={false}
               viewMode={viewMode}
             />
           </div>
           <MinimalHud
             engineState={engineState}
-            guidance={guidance}
             onToggleHud={onToggleHud}
-            selectedSpawn={selectedSpawn}
             telemetry={telemetry}
           />
         </>
@@ -342,16 +340,16 @@ export function DockingOverlay(props: DockingOverlayProps) {
 
           {/* Right column: the instruments. */}
           <div className="pointer-events-auto absolute bottom-3 right-4 top-4 hidden w-[clamp(17rem,21vw,20rem)] flex-col gap-2 overflow-y-auto pl-1 lg:flex [&>div]:shrink-0">
-            <div className="flex justify-end">
-              <CameraPanel
-                audioEnabled={audioEnabled}
-                audioSupported={audioSupported}
-                onEnableAudio={onEnableAudio}
-                onToggleHud={onToggleHud}
-                onViewModeChange={onViewModeChange}
-                viewMode={viewMode}
-              />
-            </div>
+            <CameraPanel
+              audioEnabled={audioEnabled}
+              audioSupported={audioSupported}
+              className="w-full min-w-0"
+              onEnableAudio={onEnableAudio}
+              onToggleHud={onToggleHud}
+              onViewModeChange={onViewModeChange}
+              showAbout={false}
+              viewMode={viewMode}
+            />
 
             <RadioPanel radio={vhfRadio} channel={marina.vhfChannel} />
 
@@ -472,24 +470,43 @@ export function DockingOverlay(props: DockingOverlayProps) {
   );
 }
 
+function AboutLink({ className = "" }: { className?: string }) {
+  return (
+    <Link
+      href="/about"
+      prefetch={false}
+      aria-label="About boat-sim and watch the films"
+      title="About boat-sim"
+      className={`inline-flex min-h-6 items-center rounded px-1.5 text-[0.65rem] uppercase tracking-wider underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 ${className}`}
+      style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-label)" }}
+    >
+      About
+    </Link>
+  );
+}
+
 function CameraPanel({
   audioEnabled,
   audioSupported,
+  className = "",
   onEnableAudio,
   onToggleHud,
   onViewModeChange,
+  showAbout = true,
   viewMode,
 }: {
   audioEnabled: boolean;
   audioSupported: boolean;
+  className?: string;
   onEnableAudio: (nextEnabled?: boolean) => void;
   onToggleHud: () => void;
   onViewModeChange: (mode: ViewMode) => void;
+  showAbout?: boolean;
   viewMode: ViewMode;
 }) {
   return (
-    <Panel>
-      <div className="flex items-center gap-1.5 px-2 py-1.5">
+    <Panel className={className}>
+      <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5">
         <HelmSegmented<ViewMode>
           value={viewMode}
           onChange={onViewModeChange}
@@ -512,16 +529,7 @@ function CameraPanel({
           <AudioIcon enabled={audioEnabled} muted={!audioSupported || !audioEnabled} />
         </HelmButton>
         <KeyboardLegend />
-        <Link
-          href="/about"
-          prefetch={false}
-          aria-label="About boat-sim and watch the films"
-          title="About boat-sim"
-          className="inline-flex min-h-6 items-center rounded px-1.5 text-[0.65rem] uppercase tracking-wider underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ color: "var(--helm-text-dim)", fontFamily: "var(--helm-font-label)" }}
-        >
-          About
-        </Link>
+        {showAbout ? <AboutLink /> : null}
         <HelmButton className="hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Hide panels (H)">
           H
         </HelmButton>
@@ -567,9 +575,12 @@ function BoatPlate({
             {selectedBoat.manufacturer} {selectedBoat.model}
           </p>
         </div>
-        <HelmButton size="sm" onClick={onToggle} ariaLabel={expanded ? "Collapse" : "Expand"}>
-          {expanded ? "−" : "+"}
-        </HelmButton>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <AboutLink />
+          <HelmButton size="sm" onClick={onToggle} ariaLabel={expanded ? "Collapse" : "Expand"}>
+            {expanded ? "−" : "+"}
+          </HelmButton>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 px-3 pb-2.5">
@@ -991,66 +1002,96 @@ function RadioPanel({
           {radio.monitoring ? "Monitor" : "Off"}
         </HelmButton>
       </div>
-      <p
-        className="px-3 pb-1.5 text-[0.74rem] leading-snug"
-        style={{ color: "var(--helm-text-dim)" }}
-      >
-        {radio.monitoring
-          ? radio.receiving
-            ? "Traffic on the harbour channel…"
-            : "Squelch closed — standing by."
-          : "Radio is off. Harbour traffic goes unheard."}
-      </p>
     </Panel>
   );
 }
 
 function MinimalHud({
   engineState,
-  guidance,
   onToggleHud,
-  selectedSpawn,
   telemetry,
 }: {
   engineState: TwinEngineState;
-  guidance: BerthGuidance | null;
   onToggleHud: () => void;
-  selectedSpawn: SpawnPoint;
   telemetry: DockingTelemetry;
 }) {
-  const isDeparture = selectedSpawn.kind === "departure";
-  const docked = !isDeparture && Boolean(guidance?.docked);
-  const departed = isDeparture && guidance !== null && guidance.rangeM > 25;
   const portRpm = engineState.port.running ? engineState.port.rpm : 0;
   const stbdRpm = engineState.starboard.running ? engineState.starboard.rpm : 0;
 
   return (
-    <div className="pointer-events-none flex h-full flex-col items-center justify-end">
-      <div className="pointer-events-auto mb-1 max-w-[96vw]">
+    <div className="pointer-events-none absolute inset-0 flex items-end justify-end p-3 lg:p-4">
+      <div className="pointer-events-auto">
         <Panel>
-          <div className="flex items-center gap-1.5 overflow-x-auto px-2.5 py-1.5">
-            {docked || departed ? (
-              <Chip tone="good">{docked ? "Docked" : "Under way"}</Chip>
-            ) : null}
-            <Metric label="Port" value={formatSigned(engineState.port.effectiveThrottle, 2)} />
-            <Metric label="Stbd" value={formatSigned(engineState.starboard.effectiveThrottle, 2)} />
-            <Metric label="SOG" value={telemetry.speedKnots.toFixed(1)} unit="kn" />
-            <Metric label="STW" value={telemetry.speedThroughWaterKnots.toFixed(1)} unit="kn" />
-            <Metric label="RPM" value={Math.round((portRpm + stbdRpm) * 0.5)} />
-            <Metric label="HDG" value={formatHeading(telemetry.headingDeg)} unit="T" />
-            {guidance ? (
-              <>
-                <Metric label="Rng" value={guidance.rangeM.toFixed(0)} unit="m" />
-                <Metric label="Cls" value={formatSigned(guidance.closureKnots, 1)} />
-              </>
-            ) : null}
-            <HelmButton className="hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Show panels (H)">
+          <div className="flex items-end gap-2 px-2.5 py-1.5">
+            <MiniEngineReadout
+              label="Port"
+              live={engineState.port.running}
+              power={engineState.port.running ? Math.abs(engineState.port.effectiveThrottle) : 0}
+              rpm={portRpm}
+            />
+            <MiniEngineReadout
+              label="Stbd"
+              live={engineState.starboard.running}
+              power={engineState.starboard.running ? Math.abs(engineState.starboard.effectiveThrottle) : 0}
+              rpm={stbdRpm}
+            />
+            <Metric label="Speed" value={telemetry.speedKnots.toFixed(1)} unit="kn" />
+            <HelmButton className="mb-0.5 hidden lg:inline-flex" size="sm" onClick={onToggleHud} title="Show panels (H)">
               HUD
             </HelmButton>
           </div>
         </Panel>
       </div>
     </div>
+  );
+}
+
+function MiniEngineReadout({
+  label,
+  live,
+  power,
+  rpm,
+}: {
+  label: string;
+  live: boolean;
+  power: number;
+  rpm: number;
+}) {
+  const segments = 12;
+  const fill = Math.min(1, Math.max(0, power));
+  const lit = Math.round(fill * segments);
+
+  return (
+    <Well className="min-w-[4.5rem] px-2 py-1.5">
+      <PanelLabel dim className="!text-[0.62rem]">
+        {label}
+      </PanelLabel>
+      <div className="mt-1">
+        <Readout value={live ? Math.round(rpm) : "----"} unit="rpm" size="sm" tone={live ? "readout" : "text"} />
+      </div>
+      <div
+        className="mt-1 flex h-[0.45rem] items-stretch gap-[1px]"
+        role="meter"
+        aria-label={`${label} engine power`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(fill * 100)}
+      >
+        {Array.from({ length: segments }, (_, index) => {
+          const isLit = index < lit;
+          return (
+            <span
+              key={index}
+              className="flex-1 rounded-[1px]"
+              style={{
+                background: isLit ? "var(--helm-readout)" : "var(--helm-inset)",
+                boxShadow: isLit ? "0 0 5px -1px var(--helm-readout)" : undefined,
+              }}
+            />
+          );
+        })}
+      </div>
+    </Well>
   );
 }
 
